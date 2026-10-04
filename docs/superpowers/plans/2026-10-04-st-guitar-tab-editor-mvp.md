@@ -6,7 +6,7 @@
 
 **Architecture:** The source MusicXML owns pitch and timing; the teacher-authored document owns only string/fret assignments. The browser UI always owns six fixed guitar-string rows and never depends on `musicxml-to-guitar-tab-engine` or alphaTab. A strict MusicXML intake builds deterministic source events, validation checks string/fret against source pitch, and a writer produces a separate Guitar TAB MusicXML artifact for the existing SesliTab/Student App boundary.
 
-**Tech Stack:** JavaScript ESM, Node.js >=18, `saxes` 6.0.0 for strict XML intake, vanilla HTML/CSS/JS, Node `node:test`, Playwright Test 1.63.0 for Chromium browser acceptance. No frontend framework and no alphaTab dependency in MVP.
+**Tech Stack:** JavaScript ESM, Node.js >=18, bounded internal strict XML intake for offline/browser use, vanilla HTML/CSS/JS, Node `node:test`, Playwright Test 1.63.0 for Chromium browser acceptance. No frontend framework and no alphaTab dependency in MVP.
 
 **Spec:** `docs/superpowers/specs/2026-10-04-st-guitar-tab-editor-design.md`
 
@@ -18,6 +18,7 @@
 - Source MusicXML remains authority for pitch, onset, duration, voice/staff identity, measure membership and grouping.
 - Teacher authority is limited to `string + fret`; invalid assignments fail closed.
 - MVP supports `score-partwise` MusicXML with exactly one pitched part; multipart, `score-timewise`, unpitched/percussion and unsupported timing semantics fail closed with an explicit capability result.
+- Standard external MusicXML DOCTYPE declarations may be accepted without resolving external DTDs or network resources; internal subsets/entities fail closed.
 - 1 note at an onset is a single event group; 2–6 supported pitched notes at the same onset are one vertical group; >6 fails closed.
 - Default tuning is E2 A2 D3 G3 B3 E4; fret range is 0..20.
 - No source-note creation/deletion or source pitch/rhythm/voice/staff/meter/tie mutation.
@@ -31,7 +32,7 @@
 1. **Polyphonic source timing:** `backup`, `forward` and `<chord/>` combinations must produce deterministic onsets or fail closed; no guessed ordering.
 2. **Accidentals and enharmonic spelling:** validation must compare sounding MIDI pitch while export preserves source `step/alter/octave` spelling.
 3. **Ties:** source tie start/stop may be preserved in export, but teacher assignment is per source note event; the editor must not silently merge or rewrite tie chains.
-4. **Unsupported MusicXML:** `score-timewise`, multiple parts, unpitched notes, tuplets/time-modification and malformed XML must return explicit unsupported/invalid results without corrupting the six-string UI.
+4. **Unsupported MusicXML:** `score-timewise`, multiple parts, unpitched notes, tuplets/time-modification, malformed XML and unsafe DTD/entity constructs must return explicit unsupported/invalid results without corrupting the six-string UI.
 5. **Stale editing state:** loading a new source invalidates prior event IDs/history; commands from the previous source session must be rejected.
 
 ---
@@ -96,7 +97,7 @@ browser-tests/
 
 - [ ] **Step 1: Write failing intake tests** for valid `score-partwise`, malformed XML, `score-timewise`, multiple `<part>` elements, and unpitched-only content capability rejection.
 - [ ] **Step 2: Run `node --test test/intake.test.js`** and confirm RED because `inspectMusicXml` does not exist.
-- [ ] **Step 3: Add minimal ESM package setup** with Node >=18, `saxes` 6.0.0 and test script; implement strict `inspectMusicXml` with bounded input size and explicit error codes.
+- [ ] **Step 3: Add minimal ESM package setup** with Node >=18 and test script; implement a bounded internal strict `inspectMusicXml` intake with explicit error codes, no external entity resolution, and safe handling of standard external MusicXML DOCTYPE declarations.
 - [ ] **Step 4: Run `node --test test/intake.test.js`** and require PASS.
 - [ ] **Step 5: Commit** foundation + intake as one coherent slice.
 
