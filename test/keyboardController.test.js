@@ -90,3 +90,16 @@ test('Shift+Tab moves to previous note without source mutation', async () => {
   assert.equal(ctl.getState().noteIndex, 0);
   assert.deepEqual(doc.getAssignment('a'), { string: 1, fret: 0 });
 });
+
+test('Ctrl+Shift+Z performs redo rather than undo', async () => {
+  const { createKeyboardController } = await loadController();
+  const session = makeSession();
+  const doc = createTabAssignmentDocument(session);
+  const ctl = createKeyboardController({ sourceSession: session, document: doc });
+  ctl.handleKey(key('0'));
+  ctl.handleKey(key('Tab'));
+  ctl.handleKey(key('z', { ctrlKey: true }));
+  assert.equal(doc.getAssignment('a'), null);
+  ctl.handleKey(key('z', { ctrlKey: true, shiftKey: true }));
+  assert.deepEqual(doc.getAssignment('a'), { string: 1, fret: 0 });
+});

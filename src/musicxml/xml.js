@@ -9,7 +9,11 @@ export class XmlParseError extends Error {
 }
 
 function decodeEntities(text) {
-  return text.replace(/&(#x[0-9A-Fa-f]+|#\d+|amp|lt|gt|quot|apos);/g, (_, entity) => {
+  const entityPattern = /&(#x[0-9A-Fa-f]+|#\d+|amp|lt|gt|quot|apos);/g;
+  if (text.replace(entityPattern, '').includes('&')) {
+    throw new XmlParseError('Undefined or malformed XML entity.');
+  }
+  return text.replace(entityPattern, (_, entity) => {
     if (entity === 'amp') return '&';
     if (entity === 'lt') return '<';
     if (entity === 'gt') return '>';

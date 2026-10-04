@@ -35,11 +35,11 @@ export function createKeyboardController({ sourceSession, document }) {
 
   function handleKey(event) {
     const key = event?.key ?? '';
-    if (event?.ctrlKey && key.toLowerCase() === 'z') {
-      document.undo(); fretBuffer = ''; return getState();
-    }
     if (event?.ctrlKey && (key.toLowerCase() === 'y' || (event.shiftKey && key.toLowerCase() === 'z'))) {
       document.redo(); fretBuffer = ''; return getState();
+    }
+    if (event?.ctrlKey && key.toLowerCase() === 'z') {
+      document.undo(); fretBuffer = ''; return getState();
     }
     if (key === 'Escape') { fretBuffer = ''; return getState(); }
     if (key === 'ArrowUp') { selectedString = Math.max(1, selectedString - 1); return getState(); }
