@@ -1,1 +1,1 @@
-# TAB-Only-Editor
+# st-guitar-tab-editor
