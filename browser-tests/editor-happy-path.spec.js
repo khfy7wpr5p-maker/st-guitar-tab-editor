@@ -1,0 +1,32 @@
+import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+
+test('keyboard-first MusicXML to six-string TAB export', async ({ page }) => {
+  await page.goto('/web/');
+  await expect(page.locator('.tab-row')).toHaveCount(6);
+  const xml = await readFile(new URL('../test/fixtures/browser-happy.musicxml', import.meta.url));
+  await page.locator('#musicxml-file').setInputFiles({ name: 'browser-happy.musicxml', mimeType: 'application/xml', buffer: xml });
+  await expect(page.locator('#status')).toContainText('3 nota');
+  const editor = page.locator('#tab-editor');
+  await editor.press('0');
+  await editor.press('Tab');
+  await editor.press('ArrowDown');
+  await editor.press('1');
+  await editor.press('Enter');
+  await editor.press('3');
+  await editor.press('Enter');
+  await expect(page.locator('#export-button')).toBeEnabled();
+  await editor.press('Control+z');
+  await expect(page.locator('#export-button')).toBeDisabled();
+  await editor.press('Control+y');
+  await expect(page.locator('#export-button')).toBeEnabled();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#export-button').click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  const exported = await readFile(path, 'utf8');
+  expect(exported).toContain('<staff-lines>6</staff-lines>');
+  expect(exported).toContain('<technical><string>1</string><fret>0</fret></technical>');
+  expect(exported).toContain('<technical><string>2</string><fret>1</fret></technical>');
+  expect(exported).toContain('<technical><string>1</string><fret>3</fret></technical>');
+});

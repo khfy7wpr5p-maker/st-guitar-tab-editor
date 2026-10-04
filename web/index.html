@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ST Guitar TAB Editor</title>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ST Guitar TAB Editor</h1>
+      <label class="file-button">MusicXML Aç <input id="musicxml-file" type="file" accept=".xml,.musicxml,application/xml,text/xml"></label>
+      <button id="export-button" type="button" disabled>TAB MusicXML Dışa Aktar</button>
+    </header>
+    <p id="status" role="status">MusicXML bekleniyor.</p>
+    <section id="tab-editor" tabindex="0" aria-label="Altı telli gitar TAB editörü">
+      <div id="tab-rows"></div>
+    </section>
+    <footer id="position-status">Grup — · Nota — · Tel 1 · Perde —</footer>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

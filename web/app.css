@@ -1,0 +1,13 @@
+:root { font-family: system-ui, sans-serif; }
+body { margin: 0; background: #111; color: #eee; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+h1 { margin-right: auto; font-size: 1.25rem; }
+.file-button, button { border: 1px solid #666; border-radius: 8px; padding: 8px 12px; background: #1f1f1f; color: inherit; }
+.file-button input { display: none; }
+#tab-editor { margin-top: 24px; border: 1px solid #555; border-radius: 10px; padding: 20px; outline: none; overflow-x: auto; }
+.tab-row { display: grid; grid-template-columns: 24px minmax(500px, 1fr); align-items: center; min-height: 42px; }
+.tab-line { position: relative; height: 1px; background: #aaa; }
+.tab-row.active .tab-line { height: 2px; background: #fff; }
+.tab-fret { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #111; padding: 0 5px; font: 700 18px ui-monospace, monospace; }
+#position-status { margin-top: 14px; color: #bbb; font-family: ui-monospace, monospace; }
