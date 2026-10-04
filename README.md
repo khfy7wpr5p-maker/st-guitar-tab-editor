@@ -11,6 +11,7 @@ The source MusicXML remains the musical authority for pitch and timing. The edit
 ## Current MVP boundaries
 
 - `score-partwise` MusicXML with exactly one pitched part.
+- Standard external MusicXML DOCTYPE declarations are accepted without network/DTD resolution; internal subsets/entities fail closed.
 - Single notes and 2–6 simultaneous notes.
 - Standard tuning E2 A2 D3 G3 B3 E4.
 - Frets 0–20.
