@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { test } from 'node:test';
+
+async function loadApi() {
+  try { return await import('../src/musicxml/intake.js'); } catch { return {}; }
+}
+
+const validXml = await readFile(new URL('./fixtures/minimal-valid.musicxml', import.meta.url), 'utf8');
+
+test('accepts one-part score-partwise MusicXML', async () => {
+  const { inspectMusicXml } = await loadApi();
+  assert.equal(typeof inspectMusicXml, 'function');
+  assert.deepEqual(inspectMusicXml(validXml), { ok: true, rootName: 'score-partwise' });
+});
+
+test('rejects malformed XML', async () => {
+  const { inspectMusicXml } = await loadApi();
+  assert.equal(typeof inspectMusicXml, 'function');
+  const result = inspectMusicXml('<score-partwise><part></score-partwise>');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'INVALID_XML');
+});
+
+test('rejects score-timewise', async () => {
+  const { inspectMusicXml } = await loadApi();
+  assert.equal(typeof inspectMusicXml, 'function');
+  const result = inspectMusicXml('<score-timewise version="4.0"><part-list/></score-timewise>');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'UNSUPPORTED_ROOT');
+});
+
+test('rejects multiple parts', async () => {
+  const { inspectMusicXml } = await loadApi();
+  assert.equal(typeof inspectMusicXml, 'function');
+  const xml = '<score-partwise><part-list/><part id="P1"/><part id="P2"/></score-partwise>';
+  const result = inspectMusicXml(xml);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'UNSUPPORTED_MULTIPART');
+});
+
+test('rejects unpitched-only content', async () => {
+  const { inspectMusicXml } = await loadApi();
+  assert.equal(typeof inspectMusicXml, 'function');
+  const xml = '<score-partwise><part-list/><part id="P1"><measure number="1"><note><unpitched/><duration>1</duration></note></measure></part></score-partwise>';
+  const result = inspectMusicXml(xml);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'UNSUPPORTED_UNPITCHED');
+});
