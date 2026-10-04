@@ -55,3 +55,17 @@ test('rejects undefined XML entities instead of accepting partial text', async (
   assert.equal(result.ok, false);
   assert.equal(result.code, 'INVALID_XML');
 });
+
+test('accepts a standard external MusicXML DOCTYPE without resolving it', async () => {
+  const { inspectMusicXml } = await loadApi();
+  const xml = '<?xml version="1.0"?><!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd"><score-partwise version="4.0"><part-list/><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes><note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note></measure></part></score-partwise>';
+  assert.deepEqual(inspectMusicXml(xml), { ok: true, rootName: 'score-partwise' });
+});
+
+test('rejects DOCTYPE internal subsets/entities', async () => {
+  const { inspectMusicXml } = await loadApi();
+  const xml = '<!DOCTYPE score-partwise [<!ENTITY x "E">]><score-partwise><part-list/><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes><note><pitch><step>&x;</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note></measure></part></score-partwise>';
+  const result = inspectMusicXml(xml);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'INVALID_XML');
+});

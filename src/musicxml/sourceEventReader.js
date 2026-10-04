@@ -91,6 +91,7 @@ export function readSourceEvents(xmlText) {
         onset = cursor;
         lastOnsetByVoice.set(voice, onset);
       }
+      maxCursor = Math.max(maxCursor, onset + duration);
 
       const pitch = pitchFromNote(child);
       const isRest = Boolean(firstChild(child, 'rest'));

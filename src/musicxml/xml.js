@@ -46,7 +46,7 @@ function parseAttributes(raw) {
 export function parseXml(xmlText) {
   if (typeof xmlText !== 'string' || xmlText.length === 0) throw new XmlParseError('XML must be a non-empty string.');
   if (xmlText.length > MAX_XML_CHARS) throw new XmlParseError('XML input is too large.');
-  if (/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(xmlText)) throw new XmlParseError('DTD, ENTITY and CDATA are unsupported.');
+  if (/<!ENTITY|<!\[CDATA\[/i.test(xmlText)) throw new XmlParseError('ENTITY and CDATA are unsupported.');
 
   const document = { name: '#document', attributes: Object.create(null), children: [], text: '' };
   const stack = [document];
@@ -70,6 +70,18 @@ export function parseXml(xmlText) {
       const end = xmlText.indexOf('?>', lt + 2);
       if (end < 0) throw new XmlParseError('Unclosed processing instruction.');
       index = end + 2;
+      continue;
+    }
+    if (xmlText.startsWith('<!DOCTYPE', lt)) {
+      const end = xmlText.indexOf('>', lt + 9);
+      if (end < 0) throw new XmlParseError('Unclosed DOCTYPE declaration.');
+      const declaration = xmlText.slice(lt, end + 1);
+      const quoted = `(?:"[^"]*"|'[^']*')`;
+      const safeDoctype = new RegExp(`^<!DOCTYPE\\s+[A-Za-z_][A-Za-z0-9_.:-]*(?:\\s+(?:SYSTEM\\s+${quoted}|PUBLIC\\s+${quoted}\\s+${quoted}))?\\s*>$`, 'i');
+      if (stack.length !== 1 || document.children.length !== 0 || !safeDoctype.test(declaration)) {
+        throw new XmlParseError('Unsupported or unsafe DOCTYPE declaration.');
+      }
+      index = end + 1;
       continue;
     }
     const gt = xmlText.indexOf('>', lt + 1);

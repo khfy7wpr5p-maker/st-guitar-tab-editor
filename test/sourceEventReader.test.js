@@ -76,3 +76,10 @@ test('retains tie flags and ignores rests as editable events while moving time',
   assert.equal(session.events[0].onsetDivisions, 4);
   assert.equal(session.events[0].tieStart, true);
 });
+
+test('measure extent includes the longest member of a same-onset chord', async () => {
+  const { createSourceSession } = await api();
+  const xml = score(note('E', 4, 4) + note('C', 4, 8, '<chord/>'));
+  const session = createSourceSession(xml);
+  assert.equal(session.measures[0].durationDivisions, 8);
+});
