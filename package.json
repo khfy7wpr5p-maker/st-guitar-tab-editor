@@ -8,11 +8,13 @@
   },
   "scripts": {
     "start": "node scripts/serve.js",
+    "build:browser": "node scripts/build-browser-runtime.js",
     "test": "node --test",
     "test:browser": "playwright test",
     "check:forbidden": "node scripts/check-forbidden-deps.js"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "esbuild": "0.28.2"
   }
 }
