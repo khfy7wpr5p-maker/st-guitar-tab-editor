@@ -3,6 +3,12 @@ import { inspectMusicXml } from './intake.js';
 
 const STEP_TO_SEMITONE = Object.freeze({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 });
 
+function codedError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
 function intText(node, name, { required = true, fallback = null } = {}) {
   const raw = childText(node, name);
   if (raw === null) {
@@ -36,12 +42,30 @@ function tieFlags(note) {
   return { tieStart, tieStop };
 }
 
-export function readSourceEvents(xmlText) {
+function resolveSelectedPart(inspection, partNodes, requestedPartId) {
+  if (inspection.parts.length > 1 && !requestedPartId) {
+    throw codedError('PART_SELECTION_REQUIRED', 'Multipart MusicXML requires an explicit target part for Guitar TAB authoring.');
+  }
+
+  const selectedPartId = requestedPartId ?? inspection.parts[0]?.partId;
+  const partInfo = inspection.parts.find((item) => item.partId === selectedPartId);
+  const part = partNodes.find((item) => item.attributes.id === selectedPartId);
+  if (!partInfo || !part) {
+    throw codedError('UNKNOWN_PART', `Selected MusicXML part was not found: ${selectedPartId ?? ''}`);
+  }
+  if (partInfo.pitchedCount <= 0) {
+    throw codedError('SELECTED_PART_HAS_NO_PITCHED_NOTES', `Selected MusicXML part has no pitched notes: ${selectedPartId}`);
+  }
+  return { part, partInfo };
+}
+
+export function readSourceEvents(xmlText, options = {}) {
   const inspection = inspectMusicXml(xmlText);
-  if (!inspection.ok) throw new Error(`${inspection.code}: ${inspection.message}`);
+  if (!inspection.ok) throw codedError(inspection.code, `${inspection.code}: ${inspection.message}`);
   const root = parseXml(xmlText);
-  const part = children(root, 'part')[0];
-  const partId = part.attributes.id || 'P1';
+  const partNodes = children(root, 'part');
+  const { part, partInfo } = resolveSelectedPart(inspection, partNodes, options.partId);
+  const partId = partInfo.partId;
   const events = [];
   const measures = [];
   const divisionsByMeasure = [];
@@ -141,7 +165,7 @@ export function readSourceEvents(xmlText) {
     grouped.set(key, list);
   }
   const groups = [...grouped.entries()]
-    .map(([key, list]) => {
+    .map(([, list]) => {
       if (list.length > 6) throw new Error('Simultaneous group contains more than 6 pitched notes.');
       list.sort((a, b) => a.sourceOrder - b.sourceOrder);
       const groupId = `m${list[0].measureIndex}:o${list[0].onsetDivisions}`;
@@ -155,5 +179,14 @@ export function readSourceEvents(xmlText) {
     })
     .sort((a, b) => a.measureIndex - b.measureIndex || a.onsetDivisions - b.onsetDivisions);
 
-  return { partId, measures, events, groups, divisionsByMeasure };
+  return {
+    partId,
+    selectedPartId: partId,
+    partCount: inspection.parts.length,
+    availableParts: inspection.parts,
+    measures,
+    events,
+    groups,
+    divisionsByMeasure,
+  };
 }
