@@ -22,13 +22,19 @@ function assignAll(session, positions) {
   return doc;
 }
 
+function assertInspectable(xml) {
+  const inspection = inspectMusicXml(xml);
+  assert.equal(inspection.ok, true);
+  assert.equal(inspection.rootName, 'score-partwise');
+}
+
 test('writes two-staff six-line TAB with exact technical string/fret', async () => {
   const { serializeGuitarTabMusicXml } = await writerApi();
   assert.equal(typeof serializeGuitarTabMusicXml, 'function');
   const session = createSourceSession(score(note('E',4,4) + note('C',4,4,1,'<chord/>')));
   const doc = assignAll(session, [{ string:1, fret:0 }, { string:2, fret:1 }]);
   const xml = serializeGuitarTabMusicXml({ sourceSession: session, document: doc });
-  assert.deepEqual(inspectMusicXml(xml), { ok:true, rootName:'score-partwise' });
+  assertInspectable(xml);
   assert.match(xml, /<staves>2<\/staves>/);
   assert.match(xml, /<clef number="2"><sign>TAB<\/sign><line>5<\/line><\/clef>/);
   assert.match(xml, /<staff-lines>6<\/staff-lines>/);
@@ -56,7 +62,7 @@ test('preserves multi-voice onset with backup/forward and reparses', async () =>
   const session = createSourceSession(source);
   const doc = assignAll(session, [{ string:1,fret:0 }, { string:2,fret:1 }, { string:2,fret:3 }]);
   const xml = serializeGuitarTabMusicXml({ sourceSession: session, document: doc });
-  assert.deepEqual(inspectMusicXml(xml), { ok:true, rootName:'score-partwise' });
+  assertInspectable(xml);
   assert.match(xml, /<backup><duration>8<\/duration><\/backup>/);
   assert.match(xml, /<forward><duration>4<\/duration><\/forward>/);
 });
