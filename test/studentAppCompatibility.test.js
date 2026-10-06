@@ -16,7 +16,10 @@ async function collectJs(dir) {
 
 test('pinned Student App compatibility MusicXML has two-staff six-line technical TAB shape', async () => {
   const xml = await readFile(new URL('./fixtures/student-app-compat.musicxml', import.meta.url), 'utf8');
-  assert.deepEqual(inspectMusicXml(xml), { ok:true, rootName:'score-partwise' });
+  const inspection = inspectMusicXml(xml);
+  assert.equal(inspection.ok, true);
+  assert.equal(inspection.rootName, 'score-partwise');
+  assert.equal(inspection.requiresPartSelection, false);
   assert.match(xml, /<staves>2<\/staves>/);
   assert.match(xml, /<sign>TAB<\/sign>/);
   assert.match(xml, /<staff-lines>6<\/staff-lines>/);
