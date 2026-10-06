@@ -100,6 +100,11 @@ function attributesXml(measure, firstMeasure) {
 
 export function serializeGuitarTabMusicXml({ sourceSession, document }) {
   if (!sourceSession?.events || !sourceSession?.measures || !document) throw new TypeError('sourceSession and document are required.');
+  if (sourceSession.partCount > 1) {
+    const error = new Error('Multipart MusicXML export is blocked until non-target parts can be preserved safely.');
+    error.code = 'UNSUPPORTED_MULTIPART_EXPORT';
+    throw error;
+  }
   if (document.sessionId !== sourceSession.sessionId) throw new Error('Stale assignment document does not match source session.');
   if (!document.canExport()) throw new Error('TAB assignment document is incomplete.');
   const assignments = new Map(document.listAssignments().map(({ sourceEventId, string, fret }) => [sourceEventId, { string, fret }]));
