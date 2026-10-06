@@ -11,6 +11,25 @@ function score(notes, attributes = '<divisions>4</divisions>') {
 
 const note = (step, octave, duration = 4, extras = '') => `<note>${extras}<pitch><step>${step}</step><octave>${octave}</octave></pitch><duration>${duration}</duration><voice>1</voice><type>quarter</type></note>`;
 
+function multiPartScore() {
+  return `<?xml version="1.0"?><score-partwise version="4.0">
+    <part-list>
+      <score-part id="P1"><part-name>Piano</part-name></score-part>
+      <score-part id="P2"><part-name>Violin</part-name></score-part>
+    </part-list>
+    <part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note>
+      <backup><duration>4</duration></backup>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>2</staff><type>quarter</type></note>
+      <backup><duration>4</duration></backup>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>2</voice><staff>1</staff><type>quarter</type></note>
+    </measure></part>
+    <part id="P2"><measure number="1"><attributes><divisions>4</divisions></attributes>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note>
+    </measure></part>
+  </score-partwise>`;
+}
+
 test('creates deterministic source identities and source fingerprint', async () => {
   const { createSourceSession } = await api();
   assert.equal(typeof createSourceSession, 'function');
@@ -82,4 +101,78 @@ test('measure extent includes the longest member of a same-onset chord', async (
   const xml = score(note('E', 4, 4) + note('C', 4, 8, '<chord/>'));
   const session = createSourceSession(xml);
   assert.equal(session.measures[0].durationDivisions, 8);
+});
+
+test('creates exact target-bound source sessions from full multi-part MusicXML', async () => {
+  const { createSourceSession } = await api();
+  const xml = multiPartScore();
+  const pianoRight = createSourceSession(xml, {
+    targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 1 },
+  });
+  assert.equal(pianoRight.sourceXml, xml);
+  assert.deepEqual(pianoRight.targetSelection, {
+    partId: 'P1', partIndex: 0, staff: 1, voice: 1,
+  });
+  assert.deepEqual(
+    [...new Set(pianoRight.events.map(({ partId, partIndex, staff, voice }) => `${partId}|${partIndex}|${staff}|${voice}`))],
+    ['P1|0|1|1'],
+  );
+  assert.ok(pianoRight.events.length > 0);
+
+  const pianoLeft = createSourceSession(xml, {
+    targetSelection: { partId: 'P1', partIndex: 0, staff: 2, voice: 1 },
+  });
+  assert.notEqual(pianoRight.sessionId, pianoLeft.sessionId);
+  assert.deepEqual(
+    [...new Set(pianoLeft.events.map(({ partId, partIndex, staff, voice }) => `${partId}|${partIndex}|${staff}|${voice}`))],
+    ['P1|0|2|1'],
+  );
+
+  const violin = createSourceSession(xml, {
+    targetSelection: { partId: 'P2', partIndex: 1, staff: 1, voice: 1 },
+  });
+  assert.deepEqual(
+    [...new Set(violin.events.map(({ partId, partIndex, staff, voice }) => `${partId}|${partIndex}|${staff}|${voice}`))],
+    ['P2|1|1|1'],
+  );
+});
+
+test('rejects stale, missing, duplicate, and empty target identities', async () => {
+  const { createSourceSession } = await api();
+  const xml = multiPartScore();
+  assert.throws(
+    () => createSourceSession(xml, { targetSelection: { partId: 'P1', partIndex: 1, staff: 1, voice: 1 } }),
+    /partIndex|target/i,
+  );
+  assert.throws(
+    () => createSourceSession(xml, { targetSelection: { partId: 'P1', partIndex: 0, staff: 3, voice: 1 } }),
+    /staff|target|pitched/i,
+  );
+  assert.throws(
+    () => createSourceSession(xml, { targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 9 } }),
+    /voice|target|pitched/i,
+  );
+
+  const duplicate = xml.replace('<score-part id="P2">', '<score-part id="P1">').replace('<part id="P2">', '<part id="P1">');
+  assert.throws(
+    () => createSourceSession(duplicate, { targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 1 } }),
+    /duplicate|part/i,
+  );
+
+  const restOnly = `<?xml version="1.0"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes><note><rest/><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note></measure></part></score-partwise>`;
+  assert.throws(
+    () => createSourceSession(restOnly, { targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 1 } }),
+    /pitched|target|empty/i,
+  );
+});
+
+test('keeps every simultaneous chord tone inside the selected target voice', async () => {
+  const { createSourceSession } = await api();
+  const xml = `<?xml version="1.0"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note><note><chord/><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note></measure></part></score-partwise>`;
+  const session = createSourceSession(xml, {
+    targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 1 },
+  });
+  assert.equal(session.events.length, 2);
+  assert.equal(session.groups.length, 1);
+  assert.equal(session.groups[0].sourceEventIds.length, 2);
 });
