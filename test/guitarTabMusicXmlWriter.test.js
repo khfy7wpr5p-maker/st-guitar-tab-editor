@@ -115,3 +115,11 @@ test('ambiguous or unsupported mid-measure key context cannot be silently droppe
   assert.throws(() => createSourceSession(score(body, '<divisions>4</divisions><key><fifths>0</fifths></key><key><fifths>1</fifths></key>')), /Ambiguous/);
   assert.throws(() => createSourceSession(score(body + '<attributes><key><fifths>1</fifths></key></attributes>')), /Mid-measure/);
 });
+
+test('first key attributes after elapsed time cannot be moved to measure start', () => {
+  for (const advance of [note('E', 4, 4), '<note><rest/><duration>4</duration></note>', '<forward><duration>4</duration></forward>']) {
+    const first = score(note('E', 4, 4));
+    const source = first.replace('</part>', `<measure number="2">${advance}<attributes><key><fifths>1</fifths></key></attributes></measure></part>`);
+    assert.throws(() => createSourceSession(source), /Mid-measure/);
+  }
+});

@@ -203,7 +203,9 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
     const staffKeys = keyNodes.filter((key) => key.attributes.number !== undefined);
     const selectedKeys = staffKeys.length ? staffKeys : keyNodes;
     if (selectedKeys.length > 1) throw new Error('Ambiguous selected-staff key context.');
-    if (children(measure, 'attributes').slice(1).some((node) => children(node, 'key').length)) {
+    const keyAfterElapsedTime = attributes && children(attributes, 'key').length > 0
+      && measure.children.slice(0, measure.children.indexOf(attributes)).some((node) => ['note', 'backup', 'forward'].includes(node.name));
+    if (keyAfterElapsedTime || children(measure, 'attributes').slice(1).some((node) => children(node, 'key').length)) {
       throw new Error('Mid-measure key changes are unsupported; refusing context loss.');
     }
     measures.push({
