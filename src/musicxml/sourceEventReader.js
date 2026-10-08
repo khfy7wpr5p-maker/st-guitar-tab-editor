@@ -36,12 +36,75 @@ function tieFlags(note) {
   return { tieStart, tieStop };
 }
 
-export function readSourceEvents(xmlText) {
-  const inspection = inspectMusicXml(xmlText);
+function normalizeTargetSelection(value) {
+  if (value === null || value === undefined) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('targetSelection must be an object.');
+  }
+  const partId = typeof value.partId === 'string' ? value.partId : '';
+  if (!partId || partId !== partId.trim()) throw new Error('targetSelection partId must be non-empty trimmed text.');
+  if (!Number.isSafeInteger(value.partIndex) || value.partIndex < 0) {
+    throw new Error('targetSelection partIndex must be a safe integer >= 0.');
+  }
+  if (!Number.isSafeInteger(value.staff) || value.staff < 1) {
+    throw new Error('targetSelection staff must be a safe integer >= 1.');
+  }
+  if (!Number.isSafeInteger(value.voice) || value.voice < 0) {
+    throw new Error('targetSelection voice must be a safe integer >= 0.');
+  }
+  return Object.freeze({
+    partId,
+    partIndex: value.partIndex,
+    staff: value.staff,
+    voice: value.voice,
+  });
+}
+
+function resolveSourcePart(root, targetSelection) {
+  const parts = children(root, 'part');
+  const seen = new Set();
+  for (let index = 0; index < parts.length; index += 1) {
+    const partId = parts[index]?.attributes?.id;
+    if (typeof partId !== 'string' || !partId || partId !== partId.trim()) {
+      throw new Error(`Invalid MusicXML part id at partIndex ${index}.`);
+    }
+    if (seen.has(partId)) throw new Error(`Duplicate MusicXML part id ${partId}.`);
+    seen.add(partId);
+  }
+
+  if (targetSelection === null) {
+    return { part: parts[0], partIndex: 0, partId: parts[0].attributes.id || 'P1' };
+  }
+
+  const part = parts[targetSelection.partIndex];
+  if (!part || part.attributes.id !== targetSelection.partId) {
+    throw new Error('targetSelection partId/partIndex mismatch.');
+  }
+  return {
+    part,
+    partIndex: targetSelection.partIndex,
+    partId: targetSelection.partId,
+  };
+}
+
+function explicitTargetIdentity(note) {
+  const rawVoice = childText(note, 'voice');
+  const rawStaff = childText(note, 'staff');
+  if (rawVoice === null || rawStaff === null) return null;
+  const voice = Number(rawVoice);
+  const staff = Number(rawStaff);
+  if (!Number.isSafeInteger(voice) || voice < 0) return null;
+  if (!Number.isSafeInteger(staff) || staff < 1) return null;
+  return { voice, staff };
+}
+
+export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
+  const normalizedTarget = normalizeTargetSelection(targetSelection);
+  const inspection = inspectMusicXml(xmlText, { allowMultipart: normalizedTarget !== null });
   if (!inspection.ok) throw new Error(`${inspection.code}: ${inspection.message}`);
   const root = parseXml(xmlText);
-  const part = children(root, 'part')[0];
-  const partId = part.attributes.id || 'P1';
+  const resolved = resolveSourcePart(root, normalizedTarget);
+  const { part, partIndex, partId } = resolved;
   const events = [];
   const measures = [];
   const divisionsByMeasure = [];
@@ -78,8 +141,10 @@ export function readSourceEvents(xmlText) {
       if (firstChild(child, 'grace')) throw new Error('grace notes are unsupported in MVP.');
       if (firstChild(child, 'unpitched')) throw new Error('unpitched/percussion notes are unsupported in MVP.');
 
-      const voice = childText(child, 'voice') ?? '1';
-      const staff = childText(child, 'staff') ?? '1';
+      const rawVoice = childText(child, 'voice');
+      const rawStaff = childText(child, 'staff');
+      const voice = rawVoice ?? '1';
+      const staff = rawStaff ?? '1';
       const duration = intText(child, 'duration');
       if (duration <= 0) throw new Error('Note duration must be positive.');
       const isChord = Boolean(firstChild(child, 'chord'));
@@ -97,27 +162,36 @@ export function readSourceEvents(xmlText) {
       const isRest = Boolean(firstChild(child, 'rest'));
       if (!pitch && !isRest) throw new Error('Unsupported note without pitch/rest.');
       if (pitch) {
-        const sourceEventId = `${partId}:m${measureIndex}:v${voice}:o${onset}:n${noteOrder}`;
-        const dots = children(child, 'dot').length;
-        const event = {
-          sourceEventId,
-          partId,
-          measureIndex,
-          measureNumber: measure.attributes.number ?? String(measureIndex + 1),
-          voice,
-          staff,
-          onsetDivisions: onset,
-          durationDivisions: duration,
-          divisions: currentDivisions,
-          pitch,
-          type: childText(child, 'type'),
-          dots,
-          ...tieFlags(child),
-          sourceOrder: noteOrder,
-          groupId: null,
-        };
-        events.push(event);
-        measureEventIds.push(sourceEventId);
+        const identity = explicitTargetIdentity(child);
+        const selected = normalizedTarget === null || (
+          identity !== null &&
+          identity.staff === normalizedTarget.staff &&
+          identity.voice === normalizedTarget.voice
+        );
+        if (selected) {
+          const sourceEventId = `${partId}:m${measureIndex}:v${voice}:o${onset}:n${noteOrder}`;
+          const dots = children(child, 'dot').length;
+          const event = {
+            sourceEventId,
+            partId,
+            partIndex,
+            measureIndex,
+            measureNumber: measure.attributes.number ?? String(measureIndex + 1),
+            voice,
+            staff,
+            onsetDivisions: onset,
+            durationDivisions: duration,
+            divisions: currentDivisions,
+            pitch,
+            type: childText(child, 'type'),
+            dots,
+            ...tieFlags(child),
+            sourceOrder: noteOrder,
+            groupId: null,
+          };
+          events.push(event);
+          measureEventIds.push(sourceEventId);
+        }
       }
       if (!isChord) { cursor += duration; maxCursor = Math.max(maxCursor, cursor); }
       noteOrder += 1;
@@ -131,6 +205,10 @@ export function readSourceEvents(xmlText) {
       timeSignature: timeNode ? { beats: childText(timeNode, 'beats'), beatType: childText(timeNode, 'beat-type') } : null,
       sourceEventIds: measureEventIds,
     });
+  }
+
+  if (normalizedTarget !== null && events.length === 0) {
+    throw new Error('targetSelection contains no pitched notes.');
   }
 
   const grouped = new Map();
@@ -155,5 +233,13 @@ export function readSourceEvents(xmlText) {
     })
     .sort((a, b) => a.measureIndex - b.measureIndex || a.onsetDivisions - b.onsetDivisions);
 
-  return { partId, measures, events, groups, divisionsByMeasure };
+  return {
+    partId,
+    partIndex,
+    targetSelection: normalizedTarget,
+    measures,
+    events,
+    groups,
+    divisionsByMeasure,
+  };
 }

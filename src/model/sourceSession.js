@@ -13,11 +13,25 @@ function deterministicFingerprint(text) {
   return hash.toString(16).padStart(16, '0');
 }
 
-export function createSourceSession(xmlText) {
-  const parsed = readSourceEvents(xmlText);
+function targetFingerprint(targetSelection) {
+  if (targetSelection === null) return null;
+  return deterministicFingerprint([
+    targetSelection.partId,
+    targetSelection.partIndex,
+    targetSelection.staff,
+    targetSelection.voice,
+  ].join('\u0000'));
+}
+
+export function createSourceSession(xmlText, { targetSelection = null } = {}) {
+  const parsed = readSourceEvents(xmlText, { targetSelection });
   const sourceFingerprint = deterministicFingerprint(xmlText);
+  const target = parsed.targetSelection;
+  const selectionFingerprint = targetFingerprint(target);
   return {
-    sessionId: `source:${sourceFingerprint}`,
+    sessionId: selectionFingerprint === null
+      ? `source:${sourceFingerprint}`
+      : `source:${sourceFingerprint}:target:${selectionFingerprint}`,
     sourceFingerprint,
     sourceXml: xmlText,
     ...parsed,

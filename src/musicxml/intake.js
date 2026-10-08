@@ -1,6 +1,6 @@
 import { XmlParseError, children, firstChild, parseXml } from './xml.js';
 
-export function inspectMusicXml(xmlText) {
+export function inspectMusicXml(xmlText, { allowMultipart = false } = {}) {
   let root;
   try {
     root = parseXml(xmlText);
@@ -12,15 +12,17 @@ export function inspectMusicXml(xmlText) {
     return { ok: false, code: 'UNSUPPORTED_ROOT', message: 'Only score-partwise MusicXML is supported.' };
   }
   const parts = children(root, 'part');
-  if (parts.length !== 1) {
+  if (parts.length === 0 || (!allowMultipart && parts.length !== 1)) {
     return { ok: false, code: 'UNSUPPORTED_MULTIPART', message: 'MVP requires exactly one part.' };
   }
   let pitched = 0;
   let unpitched = 0;
-  for (const measure of children(parts[0], 'measure')) {
-    for (const note of children(measure, 'note')) {
-      if (firstChild(note, 'pitch')) pitched += 1;
-      if (firstChild(note, 'unpitched')) unpitched += 1;
+  for (const part of parts) {
+    for (const measure of children(part, 'measure')) {
+      for (const note of children(measure, 'note')) {
+        if (firstChild(note, 'pitch')) pitched += 1;
+        if (firstChild(note, 'unpitched')) unpitched += 1;
+      }
     }
   }
   if (pitched === 0 && unpitched > 0) {
