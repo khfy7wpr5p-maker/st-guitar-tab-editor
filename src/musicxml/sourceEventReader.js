@@ -197,12 +197,22 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       noteOrder += 1;
     }
     const timeNode = attributes ? firstChild(attributes, 'time') : null;
+    const selectedStaff = normalizedTarget?.staff ?? 1;
+    const keyNodes = attributes ? children(attributes, 'key').filter((key) =>
+      key.attributes.number === undefined || Number(key.attributes.number) === selectedStaff) : [];
+    const staffKeys = keyNodes.filter((key) => key.attributes.number !== undefined);
+    const selectedKeys = staffKeys.length ? staffKeys : keyNodes;
+    if (selectedKeys.length > 1) throw new Error('Ambiguous selected-staff key context.');
+    if (children(measure, 'attributes').slice(1).some((node) => children(node, 'key').length)) {
+      throw new Error('Mid-measure key changes are unsupported; refusing context loss.');
+    }
     measures.push({
       measureIndex,
       number: measure.attributes.number ?? String(measureIndex + 1),
       divisions: currentDivisions,
       durationDivisions: maxCursor,
       timeSignature: timeNode ? { beats: childText(timeNode, 'beats'), beatType: childText(timeNode, 'beat-type') } : null,
+      keySignature: selectedKeys[0] ?? null,
       sourceEventIds: measureEventIds,
     });
   }

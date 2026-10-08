@@ -81,3 +81,37 @@ test('rejects export when any source event lacks an assignment', async () => {
   doc.assignPosition(session.events[0].sourceEventId, { string:1, fret:0 });
   assert.throws(() => serializeGuitarTabMusicXml({ sourceSession: session, document: doc }), /incomplete/i);
 });
+
+test('preserves explicit selected-staff key and measure key changes without changing other export bytes', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const body = '<note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>2</staff></note>';
+  const source = `<score-partwise><part-list><score-part id="P1"><part-name>Guitar</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions><key number="1"><fifths>3</fifths></key><key number="2"><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time></attributes>${body}</measure><measure number="2"><attributes><key number="2"><fifths>-1</fifths><mode>minor</mode></key></attributes>${body}</measure></part></score-partwise>`;
+  const targetSelection = { partId: 'P1', partIndex: 0, staff: 2, voice: 1 };
+  const session = createSourceSession(source, { targetSelection });
+  const xml = serializeGuitarTabMusicXml({ sourceSession: session, document: assignAll(session, [{ string: 1, fret: 0 }, { string: 1, fret: 0 }]) });
+  assert.match(xml, /<key number="1"><fifths>0<\/fifths><mode>major<\/mode><\/key>/);
+  assert.match(xml, /<key number="1"><fifths>-1<\/fifths><mode>minor<\/mode><\/key>/);
+  assert.doesNotMatch(xml, /<fifths>3<\/fifths>/);
+  assert.equal(session.sourceXml, source);
+  const withoutKeys = source.replace(/<key\b[^>]*>.*?<\/key>/g, '');
+  const baseline = createSourceSession(withoutKeys, { targetSelection });
+  const baselineXml = serializeGuitarTabMusicXml({ sourceSession: baseline, document: assignAll(baseline, [{ string: 1, fret: 0 }, { string: 1, fret: 0 }]) });
+  assert.equal(xml.replace(/<key\b[^>]*>.*?<\/key>/g, ''), baselineXml);
+});
+
+test('unselected part key does not leak into selected part export', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const body = '<note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff></note>';
+  const part = (id, fifths) => `<part id="${id}"><measure number="1"><attributes><divisions>4</divisions><key><fifths>${fifths}</fifths><mode>minor</mode></key></attributes>${body}</measure></part>`;
+  const source = `<score-partwise><part-list><score-part id="P1"><part-name>Other</part-name></score-part><score-part id="P2"><part-name>Selected</part-name></score-part></part-list>${part('P1', 5)}${part('P2', -2)}</score-partwise>`;
+  const session = createSourceSession(source, { targetSelection: { partId: 'P2', partIndex: 1, staff: 1, voice: 1 } });
+  const xml = serializeGuitarTabMusicXml({ sourceSession: session, document: assignAll(session, [{ string: 1, fret: 0 }]) });
+  assert.match(xml, /<key><fifths>-2<\/fifths><mode>minor<\/mode><\/key>/);
+  assert.doesNotMatch(xml, /<fifths>5<\/fifths>/);
+});
+
+test('ambiguous or unsupported mid-measure key context cannot be silently dropped', () => {
+  const body = note('E', 4, 4);
+  assert.throws(() => createSourceSession(score(body, '<divisions>4</divisions><key><fifths>0</fifths></key><key><fifths>1</fifths></key>')), /Ambiguous/);
+  assert.throws(() => createSourceSession(score(body + '<attributes><key><fifths>1</fifths></key></attributes>')), /Mid-measure/);
+});
