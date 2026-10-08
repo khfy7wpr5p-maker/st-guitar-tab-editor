@@ -80,8 +80,16 @@ function writeStaff(events, assignments, staff, extent) {
   return xml;
 }
 
+function contextXml(node, notationStaff = false) {
+  const attrs = { ...node.attributes };
+  if (notationStaff && attrs.number !== undefined) attrs.number = '1';
+  const encodedAttrs = Object.entries(attrs).map(([name, value]) => ` ${name}="${escapeXml(value)}"`).join('');
+  return tag(node.name, escapeXml(node.text) + node.children.map((child) => contextXml(child)).join(''), encodedAttrs);
+}
+
 function attributesXml(measure, firstMeasure) {
   let body = tag('divisions', measure.divisions);
+  if (measure.keySignature) body += contextXml(measure.keySignature, true);
   if (measure.timeSignature?.beats && measure.timeSignature?.beatType) {
     body += tag('time', tag('beats', escapeXml(measure.timeSignature.beats)) + tag('beat-type', escapeXml(measure.timeSignature.beatType)));
   }
