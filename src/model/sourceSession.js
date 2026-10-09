@@ -1,3 +1,4 @@
+import { guitarSoundingMidiForWrittenMidi } from '../guitar/tuning.js';
 import { readSourceEvents } from '../musicxml/sourceEventReader.js';
 
 function deterministicFingerprint(text) {
@@ -23,17 +24,32 @@ function targetFingerprint(targetSelection) {
   ].join('\u0000'));
 }
 
-export function createSourceSession(xmlText, { targetSelection = null } = {}) {
+function withGuitarOctaveTransposition(events, enabled) {
+  if (!enabled) return events;
+  return events.map((event) => ({
+    ...event,
+    guitarSoundingMidi: guitarSoundingMidiForWrittenMidi(event.pitch.midi),
+  }));
+}
+
+export function createSourceSession(xmlText, { targetSelection = null, guitarOctaveTransposition = false } = {}) {
+  if (typeof guitarOctaveTransposition !== 'boolean') {
+    throw new TypeError('guitarOctaveTransposition must be a boolean.');
+  }
   const parsed = readSourceEvents(xmlText, { targetSelection });
   const sourceFingerprint = deterministicFingerprint(xmlText);
   const target = parsed.targetSelection;
   const selectionFingerprint = targetFingerprint(target);
+  const transpositionSuffix = guitarOctaveTransposition ? ':guitar-octave-down' : '';
+  const events = withGuitarOctaveTransposition(parsed.events, guitarOctaveTransposition);
   return {
     sessionId: selectionFingerprint === null
-      ? `source:${sourceFingerprint}`
-      : `source:${sourceFingerprint}:target:${selectionFingerprint}`,
+      ? `source:${sourceFingerprint}${transpositionSuffix}`
+      : `source:${sourceFingerprint}:target:${selectionFingerprint}${transpositionSuffix}`,
     sourceFingerprint,
     sourceXml: xmlText,
+    guitarOctaveTransposition,
     ...parsed,
+    events,
   };
 }
