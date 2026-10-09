@@ -87,7 +87,7 @@ function contextXml(node, notationStaff = false) {
   return tag(node.name, escapeXml(node.text) + node.children.map((child) => contextXml(child)).join(''), encodedAttrs);
 }
 
-function attributesXml(measure, firstMeasure) {
+function attributesXml(measure, firstMeasure, guitarOctaveTransposition) {
   let body = tag('divisions', measure.divisions);
   if (measure.keySignature) body += contextXml(measure.keySignature, true);
   if (measure.timeSignature?.beats && measure.timeSignature?.beatType) {
@@ -102,6 +102,9 @@ function attributesXml(measure, firstMeasure) {
       tuning += tag('staff-tuning', tag('tuning-step', step) + tag('tuning-octave', octave), ` line="${index + 1}"`);
     });
     body += tag('staff-details', tuning, ' number="2" show-frets="numbers"');
+    if (guitarOctaveTransposition) {
+      body += tag('transpose', tag('diatonic', 0) + tag('chromatic', 0) + tag('octave-change', -1));
+    }
   }
   return tag('attributes', body);
 }
@@ -116,7 +119,7 @@ export function serializeGuitarTabMusicXml({ sourceSession, document }) {
   for (const measure of sourceSession.measures) {
     const events = sourceSession.events.filter((event) => event.measureIndex === measure.measureIndex);
     const extent = measure.durationDivisions || Math.max(0, ...events.map((event) => event.onsetDivisions + event.durationDivisions));
-    let body = attributesXml(measure, measure.measureIndex === 0);
+    let body = attributesXml(measure, measure.measureIndex === 0, sourceSession.guitarOctaveTransposition === true);
     body += writeStaff(events, assignments, 1, extent);
     if (extent > 0) body += tag('backup', tag('duration', extent));
     body += writeStaff(events, assignments, 2, extent);
