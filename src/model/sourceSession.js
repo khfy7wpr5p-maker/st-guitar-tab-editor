@@ -23,7 +23,14 @@ function targetFingerprint(targetSelection) {
   ].join('\u0000'));
 }
 
-export function createSourceSession(xmlText, { targetSelection = null } = {}) {
+export function createSourceSession(xmlText, options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Source session options must be an object.');
+  }
+  if (Object.hasOwn(options, 'guitarOctaveTransposition')) {
+    throw new Error('UNSUPPORTED_PITCH_POLICY: guitarOctaveTransposition cannot override source MusicXML transpose semantics.');
+  }
+  const { targetSelection = null } = options;
   const parsed = readSourceEvents(xmlText, { targetSelection });
   const sourceFingerprint = deterministicFingerprint(xmlText);
   const target = parsed.targetSelection;
