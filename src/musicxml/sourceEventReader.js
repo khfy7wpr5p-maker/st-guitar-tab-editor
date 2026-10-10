@@ -26,6 +26,33 @@ function pitchFromNote(note) {
   return { step, alter, octave, midi };
 }
 
+function selectedStaffContext(attributes, name, selectedStaff) {
+  const nodes = children(attributes, name);
+  const partWide = nodes.filter((node) => node.attributes.number === undefined);
+  const staffScoped = nodes.filter((node) => Number(node.attributes.number) === selectedStaff);
+  const selected = staffScoped.length > 0 ? staffScoped : partWide;
+  if (selected.length > 1) throw new Error(`Ambiguous selected-staff ${name} context.`);
+  return selected[0] ?? null;
+}
+
+function transpositionFromNode(node) {
+  if (!node) return Object.freeze({ chromatic: 0, octaveChange: 0, semitones: 0 });
+  if (firstChild(node, 'double')) throw new Error('Double transposition is unsupported.');
+  const chromatic = intText(node, 'chromatic');
+  const octaveChange = intText(node, 'octave-change', { required: false, fallback: 0 });
+  const semitones = chromatic + (octaveChange * 12);
+  if (!Number.isSafeInteger(semitones)) throw new Error('Transposition must resolve to whole semitones.');
+  return Object.freeze({ chromatic, octaveChange, semitones });
+}
+
+function soundingPitchMidi(pitch, transposition) {
+  const midi = pitch.midi + transposition.semitones;
+  if (!Number.isSafeInteger(midi) || midi < 0 || midi > 127) {
+    throw new Error('Transposed pitch is outside MIDI range.');
+  }
+  return midi;
+}
+
 function tieFlags(note) {
   let tieStart = false;
   let tieStop = false;
@@ -109,6 +136,8 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
   const measures = [];
   const divisionsByMeasure = [];
   let currentDivisions = null;
+  let currentTransposition = transpositionFromNode(null);
+  const selectedStaff = normalizedTarget?.staff ?? 1;
 
   const measureNodes = children(part, 'measure');
   for (let measureIndex = 0; measureIndex < measureNodes.length; measureIndex += 1) {
@@ -126,9 +155,28 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
     let noteOrder = 0;
     const lastOnsetByVoice = new Map();
     const measureEventIds = [];
+    let measureClef = null;
+    let measureTranspose = null;
+    let timeContentSeen = false;
 
     for (const child of measure.children) {
+      if (child.name === 'attributes') {
+        const clef = selectedStaffContext(child, 'clef', selectedStaff);
+        if (clef) {
+          if (measureClef) throw new Error('Ambiguous selected-staff clef context.');
+          measureClef = clef;
+        }
+        const transpose = selectedStaffContext(child, 'transpose', selectedStaff);
+        if (transpose) {
+          if (timeContentSeen) throw new Error('Mid-measure transpose changes are unsupported; refusing pitch-context loss.');
+          if (measureTranspose) throw new Error('Ambiguous selected-staff transpose context.');
+          measureTranspose = transpose;
+          currentTransposition = transpositionFromNode(transpose);
+        }
+        continue;
+      }
       if (child.name === 'backup' || child.name === 'forward') {
+        timeContentSeen = true;
         const amount = intText(child, 'duration');
         if (amount < 0) throw new Error(`${child.name} duration must be non-negative.`);
         cursor += child.name === 'backup' ? -amount : amount;
@@ -137,6 +185,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
         continue;
       }
       if (child.name !== 'note') continue;
+      timeContentSeen = true;
       if (firstChild(child, 'time-modification')) throw new Error('time-modification is unsupported in MVP.');
       if (firstChild(child, 'grace')) throw new Error('grace notes are unsupported in MVP.');
       if (firstChild(child, 'unpitched')) throw new Error('unpitched/percussion notes are unsupported in MVP.');
@@ -183,6 +232,8 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
             durationDivisions: duration,
             divisions: currentDivisions,
             pitch,
+            soundingPitchMidi: soundingPitchMidi(pitch, currentTransposition),
+            sourceTransposition: currentTransposition,
             type: childText(child, 'type'),
             dots,
             ...tieFlags(child),
@@ -197,7 +248,6 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       noteOrder += 1;
     }
     const timeNode = attributes ? firstChild(attributes, 'time') : null;
-    const selectedStaff = normalizedTarget?.staff ?? 1;
     const keyNodes = attributes ? children(attributes, 'key').filter((key) =>
       key.attributes.number === undefined || Number(key.attributes.number) === selectedStaff) : [];
     const staffKeys = keyNodes.filter((key) => key.attributes.number !== undefined);
@@ -215,6 +265,8 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       durationDivisions: maxCursor,
       timeSignature: timeNode ? { beats: childText(timeNode, 'beats'), beatType: childText(timeNode, 'beat-type') } : null,
       keySignature: selectedKeys[0] ?? null,
+      clef: measureClef,
+      transpose: measureTranspose,
       sourceEventIds: measureEventIds,
     });
   }

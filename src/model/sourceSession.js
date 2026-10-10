@@ -1,4 +1,3 @@
-import { guitarSoundingMidiForWrittenMidi } from '../guitar/tuning.js';
 import { readSourceEvents } from '../musicxml/sourceEventReader.js';
 
 function deterministicFingerprint(text) {
@@ -24,32 +23,24 @@ function targetFingerprint(targetSelection) {
   ].join('\u0000'));
 }
 
-function withGuitarOctaveTransposition(events, enabled) {
-  if (!enabled) return events;
-  return events.map((event) => ({
-    ...event,
-    guitarSoundingMidi: guitarSoundingMidiForWrittenMidi(event.pitch.midi),
-  }));
-}
-
-export function createSourceSession(xmlText, { targetSelection = null, guitarOctaveTransposition = false } = {}) {
-  if (typeof guitarOctaveTransposition !== 'boolean') {
-    throw new TypeError('guitarOctaveTransposition must be a boolean.');
+export function createSourceSession(xmlText, options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Source session options must be an object.');
   }
+  if (Object.hasOwn(options, 'guitarOctaveTransposition')) {
+    throw new Error('UNSUPPORTED_PITCH_POLICY: guitarOctaveTransposition cannot override source MusicXML transpose semantics.');
+  }
+  const { targetSelection = null } = options;
   const parsed = readSourceEvents(xmlText, { targetSelection });
   const sourceFingerprint = deterministicFingerprint(xmlText);
   const target = parsed.targetSelection;
   const selectionFingerprint = targetFingerprint(target);
-  const transpositionSuffix = guitarOctaveTransposition ? ':guitar-octave-down' : '';
-  const events = withGuitarOctaveTransposition(parsed.events, guitarOctaveTransposition);
   return {
     sessionId: selectionFingerprint === null
-      ? `source:${sourceFingerprint}${transpositionSuffix}`
-      : `source:${sourceFingerprint}:target:${selectionFingerprint}${transpositionSuffix}`,
+      ? `source:${sourceFingerprint}`
+      : `source:${sourceFingerprint}:target:${selectionFingerprint}`,
     sourceFingerprint,
     sourceXml: xmlText,
-    guitarOctaveTransposition,
     ...parsed,
-    events,
   };
 }

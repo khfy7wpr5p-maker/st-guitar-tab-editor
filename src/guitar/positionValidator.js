@@ -18,8 +18,8 @@ export function validatePositionForEvent(event, position, tuning = STANDARD_TUNI
   let midi;
   try { midi = positionToMidi({ string, fret, tuning, capo }); }
   catch { return { ok: false, code: 'INVALID_POSITION' }; }
-  const expectedMidi = Number.isSafeInteger(event?.guitarSoundingMidi)
-    ? event.guitarSoundingMidi
+  const expectedMidi = Number.isSafeInteger(event?.soundingPitchMidi)
+    ? event.soundingPitchMidi
     : event?.pitch?.midi;
   if (!event?.pitch || expectedMidi !== midi) {
     return { ok: false, code: 'PITCH_MISMATCH', expectedMidi: expectedMidi ?? null, actualMidi: midi };

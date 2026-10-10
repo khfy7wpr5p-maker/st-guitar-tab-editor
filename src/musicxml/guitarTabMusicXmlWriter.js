@@ -87,7 +87,7 @@ function contextXml(node, notationStaff = false) {
   return tag(node.name, escapeXml(node.text) + node.children.map((child) => contextXml(child)).join(''), encodedAttrs);
 }
 
-function attributesXml(measure, firstMeasure, guitarOctaveTransposition) {
+function attributesXml(measure, firstMeasure) {
   let body = tag('divisions', measure.divisions);
   if (measure.keySignature) body += contextXml(measure.keySignature, true);
   if (measure.timeSignature?.beats && measure.timeSignature?.beatType) {
@@ -95,17 +95,19 @@ function attributesXml(measure, firstMeasure, guitarOctaveTransposition) {
   }
   if (firstMeasure) {
     body += tag('staves', 2);
-    body += tag('clef', tag('sign', 'G') + tag('line', 2), ' number="1"');
+    body += measure.clef
+      ? contextXml(measure.clef, true)
+      : tag('clef', tag('sign', 'G') + tag('line', 2), ' number="1"');
     body += tag('clef', tag('sign', 'TAB') + tag('line', 5), ' number="2"');
     let tuning = tag('staff-type', 'alternate') + tag('staff-lines', 6);
     TUNING_LINES.forEach(([step, octave], index) => {
       tuning += tag('staff-tuning', tag('tuning-step', step) + tag('tuning-octave', octave), ` line="${index + 1}"`);
     });
     body += tag('staff-details', tuning, ' number="2" show-frets="numbers"');
-    if (guitarOctaveTransposition) {
-      body += tag('transpose', tag('diatonic', 0) + tag('chromatic', 0) + tag('octave-change', -1));
-    }
+  } else if (measure.clef) {
+    body += contextXml(measure.clef, true);
   }
+  if (measure.transpose) body += contextXml(measure.transpose, true);
   return tag('attributes', body);
 }
 
@@ -119,7 +121,7 @@ export function serializeGuitarTabMusicXml({ sourceSession, document }) {
   for (const measure of sourceSession.measures) {
     const events = sourceSession.events.filter((event) => event.measureIndex === measure.measureIndex);
     const extent = measure.durationDivisions || Math.max(0, ...events.map((event) => event.onsetDivisions + event.durationDivisions));
-    let body = attributesXml(measure, measure.measureIndex === 0, sourceSession.guitarOctaveTransposition === true);
+    let body = attributesXml(measure, measure.measureIndex === 0);
     body += writeStaff(events, assignments, 1, extent);
     if (extent > 0) body += tag('backup', tag('duration', extent));
     body += writeStaff(events, assignments, 2, extent);
