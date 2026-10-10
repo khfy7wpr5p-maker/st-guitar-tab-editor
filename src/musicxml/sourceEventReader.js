@@ -163,6 +163,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       if (child.name === 'attributes') {
         const clef = selectedStaffContext(child, 'clef', selectedStaff);
         if (clef) {
+          if (timeContentSeen) throw new Error('Mid-measure clef changes are unsupported; refusing notation-context loss.');
           if (measureClef) throw new Error('Ambiguous selected-staff clef context.');
           measureClef = clef;
         }

@@ -101,3 +101,14 @@ test('deprecated boolean octave policy cannot override source semantics', () => 
     /guitarOctaveTransposition|source.*transpose|unsupported/i,
   );
 });
+
+test('mid-measure clef context fails closed instead of moving to measure start', () => {
+  const firstNote = '<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff></note>';
+  const secondNote = '<note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff></note>';
+  const source = score().replace(
+    /<note>.*<\/note>/,
+    `${firstNote}<attributes><clef number="1"><sign>G</sign><line>2</line><clef-octave-change>-1</clef-octave-change></clef></attributes>${secondNote}`,
+  );
+
+  assert.throws(() => createSourceSession(source), /mid-measure clef/i);
+});
