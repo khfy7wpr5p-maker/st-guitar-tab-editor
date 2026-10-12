@@ -19,6 +19,7 @@ test('trusted source technical string/fret seeds the assignment document and sur
   const event = session.events[0];
 
   assert.deepEqual(event.sourceTechnicalPosition, { string: 1, fret: 0 });
+  assert.equal(event.guitarPhysicalPitchMidi, 64);
   const document = createTabAssignmentDocument(session);
   assert.deepEqual(document.getAssignment(event.sourceEventId), { string: 1, fret: 0 });
   assert.equal(document.canExport(), true);
@@ -38,12 +39,14 @@ test('notation-only source remains unassigned and is never auto-fingered', () =>
   assert.equal(document.canExport(), false);
 });
 
-test('trusted technical position that contradicts the declared guitar target fails closed', () => {
+test('trusted technical position overrides derived standard-guitar octave target without re-fingering', () => {
   const source = score(e4Note('<notations><technical><string>1</string><fret>0</fret></technical></notations>'));
   const session = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+  const event = session.events[0];
 
-  assert.throws(
-    () => createTabAssignmentDocument(session),
-    /source.*technical|pitch mismatch|invalid guitar position/i,
-  );
+  assert.deepEqual(event.sourceTechnicalPosition, { string: 1, fret: 0 });
+  assert.equal(event.guitarPhysicalPitchMidi, 64);
+  const document = createTabAssignmentDocument(session);
+  assert.deepEqual(document.getAssignment(event.sourceEventId), { string: 1, fret: 0 });
+  assert.equal(document.canExport(), true);
 });
