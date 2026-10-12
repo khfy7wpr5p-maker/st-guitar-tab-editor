@@ -1,3 +1,5 @@
+import { STANDARD_TUNING } from './tuning.js';
+
 export const GUITAR_PITCH_POLICY = Object.freeze({
   SOURCE_SOUNDING: 'source-sounding',
   STANDARD_GUITAR_WRITTEN: 'standard-guitar-written',
@@ -19,8 +21,21 @@ function assertMidi(value, label) {
   return value;
 }
 
+function sourceTechnicalMidi(event) {
+  const position = event?.sourceTechnicalPosition;
+  if (!position) return null;
+  const openMidi = STANDARD_TUNING[position.string];
+  if (!Number.isSafeInteger(openMidi) || !Number.isSafeInteger(position.fret)) {
+    throw new Error('Invalid source guitar technical position.');
+  }
+  return assertMidi(openMidi + position.fret, 'Source guitar technical pitch');
+}
+
 export function resolveGuitarPhysicalPitch(event, policy = GUITAR_PITCH_POLICY.SOURCE_SOUNDING) {
   const normalizedPolicy = normalizeGuitarPitchPolicy(policy);
+  const technicalMidi = sourceTechnicalMidi(event);
+  if (technicalMidi !== null) return technicalMidi;
+
   const writtenMidi = assertMidi(event?.pitch?.midi, 'Written pitch');
 
   if (normalizedPolicy === GUITAR_PITCH_POLICY.SOURCE_SOUNDING) {
