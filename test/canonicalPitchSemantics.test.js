@@ -113,7 +113,7 @@ test('mid-measure clef context fails closed instead of moving to measure start',
   assert.throws(() => createSourceSession(source), /mid-measure clef/i);
 });
 
-test('standard guitar written policy resolves A4 to physical A3 and isolates session identity', () => {
+test('standard guitar written policy resolves plain A4 to physical A3 and isolates session identity', () => {
   const source = score({ step: 'A', alter: 0, octave: 4 });
   const sourceSounding = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
   const standardGuitar = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
@@ -147,7 +147,27 @@ test('standard guitar written policy resolves A4 to physical A3 and isolates ses
   );
 });
 
-test('standard guitar written policy does not stack explicit source transpose', () => {
+test('standard guitar target does not double-shift an explicit octave-down clef source', () => {
+  const source = score({
+    step: 'C',
+    alter: 1,
+    octave: 4,
+    attributes: '<divisions>4</divisions><clef number="1"><sign>G</sign><line>2</line><clef-octave-change>-1</clef-octave-change></clef>',
+  });
+  const session = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+  const event = session.events[0];
+
+  assert.equal(event.pitch.midi, 61);
+  assert.equal(event.soundingPitchMidi, 61);
+  assert.equal(event.sourceClefOctaveChange, -1);
+  assert.equal(event.guitarPhysicalPitchMidi, 61);
+
+  const document = documentFor(session);
+  assert.deepEqual(document.assignPosition(event.sourceEventId, { string: 2, fret: 2 }), { string: 2, fret: 2 });
+  assert.throws(() => documentFor(session).assignPosition(event.sourceEventId, { string: 5, fret: 4 }), /pitch/i);
+});
+
+test('standard guitar written policy starts from explicit source sounding pitch before target octave shift', () => {
   const source = score({
     step: 'A',
     alter: 0,
@@ -161,8 +181,18 @@ test('standard guitar written policy does not stack explicit source transpose', 
   assert.equal(sourceSounding.events[0].soundingPitchMidi, 67);
   assert.equal(sourceSounding.events[0].guitarPhysicalPitchMidi, 67);
   assert.equal(standardGuitar.events[0].soundingPitchMidi, 67);
-  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 57);
+  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 55);
   assert.equal(standardGuitar.sourceXml, source);
+});
+
+test('unsupported clef octave context fails closed for standard guitar target', () => {
+  const source = score({
+    attributes: '<divisions>4</divisions><clef number="1"><sign>G</sign><line>2</line><clef-octave-change>1</clef-octave-change></clef>',
+  });
+  assert.throws(
+    () => createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' }),
+    /clef.*octave|unsupported/i,
+  );
 });
 
 test('unknown guitar pitch policy fails closed', () => {
