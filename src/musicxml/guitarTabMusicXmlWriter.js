@@ -1,6 +1,7 @@
 const TUNING_LINES = Object.freeze([
   ['E', 2], ['A', 2], ['D', 3], ['G', 3], ['B', 3], ['E', 4],
 ]);
+const OSMD_SECOND_STAFF_VOICE_START = 5;
 
 function escapeXml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
@@ -55,7 +56,10 @@ function createTabVoiceMap(events) {
   const occupiedVoiceNumbers = new Set(sourceVoices
     .map((voice) => Number.parseInt(String(voice), 10))
     .filter((voice) => Number.isSafeInteger(voice) && voice >= 0));
-  let nextVoice = Math.max(0, ...occupiedVoiceNumbers) + 1;
+  let nextVoice = Math.max(
+    OSMD_SECOND_STAFF_VOICE_START,
+    Math.max(0, ...occupiedVoiceNumbers) + 1,
+  );
   const tabVoices = new Map();
   for (const sourceVoice of sourceVoices) {
     while (occupiedVoiceNumbers.has(nextVoice)) nextVoice += 1;
