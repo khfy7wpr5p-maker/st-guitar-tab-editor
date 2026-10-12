@@ -25,6 +25,7 @@ test('pinned Student App compatibility MusicXML has two-staff six-line technical
     .map((match) => ({ voice: match[1], staff: match[2] }));
   const notationVoices = new Set(notes.filter((note) => note.staff === '1').map((note) => note.voice));
   const tabVoices = new Set(notes.filter((note) => note.staff === '2').map((note) => note.voice));
+  assert.deepEqual([...tabVoices], ['5'], 'second-staff TAB must use OSMD voice 5 or above');
   assert.deepEqual(
     [...tabVoices].filter((voice) => notationVoices.has(voice)),
     [],
