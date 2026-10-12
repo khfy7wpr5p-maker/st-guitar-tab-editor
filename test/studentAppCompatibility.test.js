@@ -21,6 +21,15 @@ test('pinned Student App compatibility MusicXML has two-staff six-line technical
   assert.match(xml, /<sign>TAB<\/sign>/);
   assert.match(xml, /<staff-lines>6<\/staff-lines>/);
   assert.match(xml, /<technical><string>[1-6]<\/string><fret>\d+<\/fret><\/technical>/);
+  const notes = [...xml.matchAll(/<note>[\s\S]*?<voice>([^<]+)<\/voice>[\s\S]*?<staff>([12])<\/staff>[\s\S]*?<\/note>/gu)]
+    .map((match) => ({ voice: match[1], staff: match[2] }));
+  const notationVoices = new Set(notes.filter((note) => note.staff === '1').map((note) => note.voice));
+  const tabVoices = new Set(notes.filter((note) => note.staff === '2').map((note) => note.voice));
+  assert.deepEqual(
+    [...tabVoices].filter((voice) => notationVoices.has(voice)),
+    [],
+    'the compatibility fixture must not encode notation and TAB as one cross-staff voice',
+  );
 });
 
 test('production source and package do not depend on Guitar TAB Engine or alphaTab', async () => {
