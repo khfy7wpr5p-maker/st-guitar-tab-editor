@@ -36,12 +36,17 @@ export function resolveGuitarPhysicalPitch(event, policy = GUITAR_PITCH_POLICY.S
   const technicalMidi = sourceTechnicalMidi(event);
   if (technicalMidi !== null) return technicalMidi;
 
-  const writtenMidi = assertMidi(event?.pitch?.midi, 'Written pitch');
+  const soundingMidi = assertMidi(event?.soundingPitchMidi, 'Source sounding pitch');
+  if (normalizedPolicy === GUITAR_PITCH_POLICY.SOURCE_SOUNDING) return soundingMidi;
 
-  if (normalizedPolicy === GUITAR_PITCH_POLICY.SOURCE_SOUNDING) {
-    return assertMidi(event?.soundingPitchMidi, 'Source sounding pitch');
+  const clefOctaveChange = event?.sourceClefOctaveChange ?? 0;
+  if (!Number.isSafeInteger(clefOctaveChange)) {
+    throw new Error('Invalid source clef octave context.');
+  }
+  if (clefOctaveChange === -1) return soundingMidi;
+  if (clefOctaveChange !== 0) {
+    throw new Error(`UNSUPPORTED_CLEF_OCTAVE_CONTEXT: ${clefOctaveChange}`);
   }
 
-  const physicalMidi = writtenMidi - 12;
-  return assertMidi(physicalMidi, 'Standard guitar physical pitch');
+  return assertMidi(soundingMidi - 12, 'Standard guitar physical pitch');
 }
