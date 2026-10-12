@@ -1,6 +1,7 @@
 import { createKeyboardController } from '../editor/keyboardController.js';
 import { createFixedSixStringRows } from '../ui/fixedSixStringView.js';
 import {
+  GUITAR_PITCH_POLICY,
   STANDARD_TUNING,
   createSourceSession,
   createTabAssignmentDocument,
@@ -27,6 +28,7 @@ export function createBrowserEditorRuntime() {
   return Object.freeze({
     runtimeVersion: GUITAR_TAB_EDITOR_RUNTIME_VERSION,
     profile,
+    GUITAR_PITCH_POLICY,
     STANDARD_TUNING,
     inspectMusicXml,
     createSourceSession,
