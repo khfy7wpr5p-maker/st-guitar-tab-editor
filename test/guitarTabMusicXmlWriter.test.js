@@ -57,7 +57,11 @@ test('uses a distinct TAB voice namespace without changing notation voices', asy
   const tabVoices = new Set(notes.filter((item) => item.staff === '2').map((item) => item.voice));
 
   assert.deepEqual([...notationVoices].sort(), ['1', '2']);
-  assert.equal(tabVoices.size, 2, 'each source voice must remain independent on the TAB staff');
+  assert.deepEqual(
+    [...tabVoices].sort(),
+    ['5', '6'],
+    'TAB voices must use OSMD\'s second-staff voice range while remaining independent',
+  );
   assert.deepEqual(
     [...tabVoices].filter((voice) => notationVoices.has(voice)),
     [],
