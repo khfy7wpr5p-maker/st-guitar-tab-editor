@@ -37,6 +37,34 @@ test('writes two-staff six-line TAB with exact technical string/fret', async () 
   assert.equal((xml.match(/<staff>2<\/staff>/g) ?? []).length, 2);
 });
 
+test('uses a distinct TAB voice namespace without changing notation voices', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const source = score(
+    note('E', 4, 4, 1)
+      + '<backup><duration>4</duration></backup>'
+      + note('C', 4, 4, 2),
+  );
+  const session = createSourceSession(source);
+  const document = assignAll(session, [
+    { string: 1, fret: 0 },
+    { string: 2, fret: 1 },
+  ]);
+
+  const xml = serializeGuitarTabMusicXml({ sourceSession: session, document });
+  const notes = [...xml.matchAll(/<note>[\s\S]*?<voice>([^<]+)<\/voice>[\s\S]*?<staff>([12])<\/staff>[\s\S]*?<\/note>/gu)]
+    .map((match) => ({ voice: match[1], staff: match[2] }));
+  const notationVoices = new Set(notes.filter((item) => item.staff === '1').map((item) => item.voice));
+  const tabVoices = new Set(notes.filter((item) => item.staff === '2').map((item) => item.voice));
+
+  assert.deepEqual([...notationVoices].sort(), ['1', '2']);
+  assert.equal(tabVoices.size, 2, 'each source voice must remain independent on the TAB staff');
+  assert.deepEqual(
+    [...tabVoices].filter((voice) => notationVoices.has(voice)),
+    [],
+    'notation and TAB staff voices must not collide inside one MusicXML part',
+  );
+});
+
 test('preserves accidental spelling, duration, voice and tie flags', async () => {
   const { serializeGuitarTabMusicXml } = await writerApi();
   const source = score('<note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>4</duration><voice>2</voice><type>quarter</type><tie type="start"/></note>');
