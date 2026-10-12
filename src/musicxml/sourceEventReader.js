@@ -26,6 +26,34 @@ function pitchFromNote(note) {
   return { step, alter, octave, midi };
 }
 
+function sourceTechnicalPositionFromNote(note) {
+  const candidates = [];
+  for (const notations of children(note, 'notations')) {
+    for (const technical of children(notations, 'technical')) {
+      const rawString = childText(technical, 'string');
+      const rawFret = childText(technical, 'fret');
+      if (rawString === null && rawFret === null) continue;
+      if (rawString === null || rawFret === null) {
+        throw new Error('Incomplete source guitar technical string/fret evidence.');
+      }
+      const string = Number(rawString);
+      const fret = Number(rawFret);
+      if (!Number.isSafeInteger(string) || string < 1 || string > 6) {
+        throw new Error('Invalid source guitar technical string.');
+      }
+      if (!Number.isSafeInteger(fret) || fret < 0 || fret > 20) {
+        throw new Error('Invalid source guitar technical fret.');
+      }
+      candidates.push({ string, fret });
+    }
+  }
+  if (candidates.length === 0) return null;
+  const unique = new Map(candidates.map((position) => [`${position.string}:${position.fret}`, position]));
+  if (unique.size > 1) throw new Error('Ambiguous source guitar technical string/fret evidence.');
+  const [position] = unique.values();
+  return Object.freeze({ ...position });
+}
+
 function selectedStaffContext(attributes, name, selectedStaff) {
   const nodes = children(attributes, name);
   const partWide = nodes.filter((node) => node.attributes.number === undefined);
@@ -235,6 +263,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
             pitch,
             soundingPitchMidi: soundingPitchMidi(pitch, currentTransposition),
             sourceTransposition: currentTransposition,
+            sourceTechnicalPosition: sourceTechnicalPositionFromNote(child),
             type: childText(child, 'type'),
             dots,
             ...tieFlags(child),
