@@ -1,4 +1,9 @@
 import { readSourceEvents } from '../musicxml/sourceEventReader.js';
+import {
+  GUITAR_PITCH_POLICY,
+  normalizeGuitarPitchPolicy,
+  resolveGuitarPhysicalPitch,
+} from '../guitar/guitarPitchPolicy.js';
 
 function deterministicFingerprint(text) {
   let hash = 0xcbf29ce484222325n;
@@ -23,6 +28,13 @@ function targetFingerprint(targetSelection) {
   ].join('\u0000'));
 }
 
+function sessionIdFor(sourceFingerprint, targetSelection, guitarPitchPolicy) {
+  const selectionFingerprint = targetFingerprint(targetSelection);
+  const policyFingerprint = deterministicFingerprint(guitarPitchPolicy);
+  const targetSuffix = selectionFingerprint === null ? '' : `:target:${selectionFingerprint}`;
+  return `source:${sourceFingerprint}${targetSuffix}:guitar-policy:${policyFingerprint}`;
+}
+
 export function createSourceSession(xmlText, options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new TypeError('Source session options must be an object.');
@@ -30,17 +42,25 @@ export function createSourceSession(xmlText, options = {}) {
   if (Object.hasOwn(options, 'guitarOctaveTransposition')) {
     throw new Error('UNSUPPORTED_PITCH_POLICY: guitarOctaveTransposition cannot override source MusicXML transpose semantics.');
   }
-  const { targetSelection = null } = options;
+  const {
+    targetSelection = null,
+    guitarPitchPolicy = GUITAR_PITCH_POLICY.SOURCE_SOUNDING,
+  } = options;
+  const normalizedGuitarPitchPolicy = normalizeGuitarPitchPolicy(guitarPitchPolicy);
   const parsed = readSourceEvents(xmlText, { targetSelection });
   const sourceFingerprint = deterministicFingerprint(xmlText);
   const target = parsed.targetSelection;
-  const selectionFingerprint = targetFingerprint(target);
+  const events = parsed.events.map((event) => ({
+    ...event,
+    guitarPhysicalPitchMidi: resolveGuitarPhysicalPitch(event, normalizedGuitarPitchPolicy),
+  }));
+
   return {
-    sessionId: selectionFingerprint === null
-      ? `source:${sourceFingerprint}`
-      : `source:${sourceFingerprint}:target:${selectionFingerprint}`,
+    sessionId: sessionIdFor(sourceFingerprint, target, normalizedGuitarPitchPolicy),
     sourceFingerprint,
     sourceXml: xmlText,
     ...parsed,
+    guitarPitchPolicy: normalizedGuitarPitchPolicy,
+    events,
   };
 }
