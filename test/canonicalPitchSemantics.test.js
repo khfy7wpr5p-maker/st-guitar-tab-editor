@@ -112,3 +112,62 @@ test('mid-measure clef context fails closed instead of moving to measure start',
 
   assert.throws(() => createSourceSession(source), /mid-measure clef/i);
 });
+
+test('standard guitar written policy resolves A4 to physical A3 and isolates session identity', () => {
+  const source = score({ step: 'A', alter: 0, octave: 4 });
+  const sourceSounding = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
+  const standardGuitar = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+
+  assert.equal(sourceSounding.events[0].pitch.midi, 69);
+  assert.equal(sourceSounding.events[0].soundingPitchMidi, 69);
+  assert.equal(sourceSounding.events[0].guitarPhysicalPitchMidi, 69);
+  assert.equal(standardGuitar.events[0].pitch.midi, 69);
+  assert.equal(standardGuitar.events[0].soundingPitchMidi, 69);
+  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 57);
+  assert.notEqual(sourceSounding.sessionId, standardGuitar.sessionId);
+  assert.equal(sourceSounding.sourceXml, source);
+  assert.equal(standardGuitar.sourceXml, source);
+
+  const accepted = documentFor(standardGuitar);
+  assert.deepEqual(
+    accepted.assignPosition(standardGuitar.events[0].sourceEventId, { string: 3, fret: 2 }),
+    { string: 3, fret: 2 },
+  );
+
+  const rejected = documentFor(standardGuitar);
+  assert.throws(
+    () => rejected.assignPosition(standardGuitar.events[0].sourceEventId, { string: 1, fret: 5 }),
+    /pitch/i,
+  );
+
+  const sourceSoundingDocument = documentFor(sourceSounding);
+  assert.deepEqual(
+    sourceSoundingDocument.assignPosition(sourceSounding.events[0].sourceEventId, { string: 1, fret: 5 }),
+    { string: 1, fret: 5 },
+  );
+});
+
+test('standard guitar written policy does not stack explicit source transpose', () => {
+  const source = score({
+    step: 'A',
+    alter: 0,
+    octave: 4,
+    attributes: '<divisions>4</divisions><transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose>',
+  });
+  const sourceSounding = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
+  const standardGuitar = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+
+  assert.equal(sourceSounding.events[0].pitch.midi, 69);
+  assert.equal(sourceSounding.events[0].soundingPitchMidi, 67);
+  assert.equal(sourceSounding.events[0].guitarPhysicalPitchMidi, 67);
+  assert.equal(standardGuitar.events[0].soundingPitchMidi, 67);
+  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 57);
+  assert.equal(standardGuitar.sourceXml, source);
+});
+
+test('unknown guitar pitch policy fails closed', () => {
+  assert.throws(
+    () => createSourceSession(score(), { guitarPitchPolicy: 'guess-from-filename' }),
+    /guitar.*pitch.*policy|unsupported|unknown/i,
+  );
+});
