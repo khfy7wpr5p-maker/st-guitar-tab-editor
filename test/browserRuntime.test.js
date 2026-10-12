@@ -85,11 +85,17 @@ test('GTAB-09A bundle exposes only the frozen teacher TAB core runtime', async (
   assert.equal(runtime.profile.publicationAuthority, false);
 
   const source = '<?xml version="1.0"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Source</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes><note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note></measure></part></score-partwise>';
-  const guitarSession = runtime.createSourceSession(source, {
-    guitarPitchPolicy: runtime.GUITAR_PITCH_POLICY.STANDARD_GUITAR_WRITTEN,
+  const defaultGuitarSession = runtime.createSourceSession(source);
+  assert.equal(defaultGuitarSession.events[0].soundingPitchMidi, 69);
+  assert.equal(defaultGuitarSession.events[0].guitarPhysicalPitchMidi, 57);
+  assert.equal(defaultGuitarSession.guitarPitchPolicy, 'standard-guitar-written');
+
+  const sourceSoundingSession = runtime.createSourceSession(source, {
+    guitarPitchPolicy: runtime.GUITAR_PITCH_POLICY.SOURCE_SOUNDING,
   });
-  assert.equal(guitarSession.events[0].soundingPitchMidi, 69);
-  assert.equal(guitarSession.events[0].guitarPhysicalPitchMidi, 57);
+  assert.equal(sourceSoundingSession.events[0].soundingPitchMidi, 69);
+  assert.equal(sourceSoundingSession.events[0].guitarPhysicalPitchMidi, 69);
+  assert.equal(sourceSoundingSession.guitarPitchPolicy, 'source-sounding');
 
   const descriptor = Object.getOwnPropertyDescriptor(context, GUITAR_TAB_EDITOR_RUNTIME_GLOBAL);
   assert.equal(descriptor?.writable, false);
