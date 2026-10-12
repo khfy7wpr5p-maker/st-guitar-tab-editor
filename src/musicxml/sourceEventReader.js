@@ -63,6 +63,14 @@ function selectedStaffContext(attributes, name, selectedStaff) {
   return selected[0] ?? null;
 }
 
+function clefOctaveChangeFromNode(node) {
+  if (!node) return 0;
+  const changes = children(node, 'clef-octave-change');
+  if (changes.length > 1) throw new Error('Ambiguous selected-staff clef octave context.');
+  if (changes.length === 0) return 0;
+  return intText(node, 'clef-octave-change');
+}
+
 function transpositionFromNode(node) {
   if (!node) return Object.freeze({ chromatic: 0, octaveChange: 0, semitones: 0 });
   if (firstChild(node, 'double')) throw new Error('Double transposition is unsupported.');
@@ -165,6 +173,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
   const divisionsByMeasure = [];
   let currentDivisions = null;
   let currentTransposition = transpositionFromNode(null);
+  let currentClefOctaveChange = 0;
   const selectedStaff = normalizedTarget?.staff ?? 1;
 
   const measureNodes = children(part, 'measure');
@@ -194,6 +203,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
           if (timeContentSeen) throw new Error('Mid-measure clef changes are unsupported; refusing notation-context loss.');
           if (measureClef) throw new Error('Ambiguous selected-staff clef context.');
           measureClef = clef;
+          currentClefOctaveChange = clefOctaveChangeFromNode(clef);
         }
         const transpose = selectedStaffContext(child, 'transpose', selectedStaff);
         if (transpose) {
@@ -263,6 +273,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
             pitch,
             soundingPitchMidi: soundingPitchMidi(pitch, currentTransposition),
             sourceTransposition: currentTransposition,
+            sourceClefOctaveChange: currentClefOctaveChange,
             sourceTechnicalPosition: sourceTechnicalPositionFromNote(child),
             type: childText(child, 'type'),
             dots,
