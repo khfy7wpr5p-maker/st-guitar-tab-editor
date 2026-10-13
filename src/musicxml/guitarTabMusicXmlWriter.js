@@ -95,14 +95,19 @@ function attributesXml(measure, firstMeasure) {
   }
   if (firstMeasure) {
     body += tag('staves', 2);
-    body += tag('clef', tag('sign', 'G') + tag('line', 2), ' number="1"');
+    body += measure.clef
+      ? contextXml(measure.clef, true)
+      : tag('clef', tag('sign', 'G') + tag('line', 2), ' number="1"');
     body += tag('clef', tag('sign', 'TAB') + tag('line', 5), ' number="2"');
     let tuning = tag('staff-type', 'alternate') + tag('staff-lines', 6);
     TUNING_LINES.forEach(([step, octave], index) => {
       tuning += tag('staff-tuning', tag('tuning-step', step) + tag('tuning-octave', octave), ` line="${index + 1}"`);
     });
     body += tag('staff-details', tuning, ' number="2" show-frets="numbers"');
+  } else if (measure.clef) {
+    body += contextXml(measure.clef, true);
   }
+  if (measure.transpose) body += contextXml(measure.transpose, true);
   return tag('attributes', body);
 }
 
