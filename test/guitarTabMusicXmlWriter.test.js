@@ -123,3 +123,66 @@ test('first key attributes after elapsed time cannot be moved to measure start',
     assert.throws(() => createSourceSession(source), /Mid-measure/);
   }
 });
+
+
+test('writes an explicit staff-one number when the selected source clef omits it', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const attrs = '<divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef>';
+  const source = score(note('E', 4, 4), attrs);
+  const session = createSourceSession(source);
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [{ string: 1, fret: 0 }]),
+  });
+
+  assert.match(xml, /<clef number="1"><sign>G<\/sign><line>2<\/line><\/clef>/);
+  assert.match(xml, /<clef number="2"><sign>TAB<\/sign><line>5<\/line><\/clef>/);
+  assert.equal(session.sourceXml, source, 'canonical export must not mutate the source MusicXML');
+});
+
+test('uses disjoint notation and TAB voice namespaces for OSMD multi-staff rendering', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const source = score(
+    note('E', 4, 4, 1)
+      + '<backup><duration>4</duration></backup>'
+      + note('C', 4, 4, 2),
+  );
+  const session = createSourceSession(source);
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [
+      { string: 1, fret: 0 },
+      { string: 2, fret: 1 },
+    ]),
+  });
+  const notes = [...xml.matchAll(/<note>[\s\S]*?<voice>([^<]+)<\/voice>[\s\S]*?<staff>([12])<\/staff>[\s\S]*?<\/note>/gu)]
+    .map((match) => ({ voice: match[1], staff: match[2] }));
+  const notationVoices = new Set(notes.filter((item) => item.staff === '1').map((item) => item.voice));
+  const tabVoices = new Set(notes.filter((item) => item.staff === '2').map((item) => item.voice));
+
+  assert.deepEqual([...notationVoices].sort(), ['1', '2']);
+  assert.deepEqual([...tabVoices].sort(), ['5', '6']);
+  assert.deepEqual(
+    [...tabVoices].filter((voice) => notationVoices.has(voice)),
+    [],
+    'notation and TAB staff voices must not collide inside one MusicXML part',
+  );
+});
+
+
+test('allocates the first free TAB voice without overflowing a maximum source voice', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const sourceVoice = String(Number.MAX_SAFE_INTEGER);
+  const session = createSourceSession(score(note('E', 4, 4, sourceVoice)));
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [{ string: 1, fret: 0 }]),
+  });
+  const notes = [...xml.matchAll(/<note>[\s\S]*?<voice>([^<]+)<\/voice>[\s\S]*?<staff>([12])<\/staff>[\s\S]*?<\/note>/gu)]
+    .map((match) => ({ voice: match[1], staff: match[2] }));
+
+  assert.deepEqual(notes, [
+    { voice: sourceVoice, staff: '1' },
+    { voice: '5', staff: '2' },
+  ]);
+});
