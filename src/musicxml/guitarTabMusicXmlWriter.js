@@ -1,6 +1,7 @@
 const TUNING_LINES = Object.freeze([
   ['E', 2], ['A', 2], ['D', 3], ['G', 3], ['B', 3], ['E', 4],
 ]);
+const OSMD_SECOND_STAFF_VOICE_START = 5;
 
 function escapeXml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
@@ -31,12 +32,12 @@ function notationsXml(event, assignment, withTechnical) {
   return body ? tag('notations', body) : '';
 }
 
-function noteXml(event, assignment, staff, chord) {
+function noteXml(event, assignment, staff, chord, voice = event.voice) {
   let body = chord ? empty('chord') : '';
   body += pitchXml(event.pitch);
   body += tag('duration', event.durationDivisions);
   body += tieXml(event);
-  body += tag('voice', escapeXml(event.voice));
+  body += tag('voice', escapeXml(voice));
   if (event.type) body += tag('type', escapeXml(event.type));
   for (let i = 0; i < (event.dots ?? 0); i += 1) body += empty('dot');
   body += tag('staff', staff);
@@ -50,7 +51,27 @@ function voiceSort(a, b) {
   return String(a).localeCompare(String(b));
 }
 
-function writeStaff(events, assignments, staff, extent) {
+function createTabVoiceMap(events) {
+  const sourceVoices = [...new Set(events.map((event) => event.voice))].sort(voiceSort);
+  const occupiedVoiceNumbers = new Set(sourceVoices
+    .map((voice) => Number.parseInt(String(voice), 10))
+    .filter((voice) => Number.isSafeInteger(voice) && voice >= 0));
+  let nextVoice = Math.max(
+    OSMD_SECOND_STAFF_VOICE_START,
+    Math.max(0, ...occupiedVoiceNumbers) + 1,
+  );
+  const tabVoices = new Map();
+  for (const sourceVoice of sourceVoices) {
+    while (occupiedVoiceNumbers.has(nextVoice)) nextVoice += 1;
+    if (!Number.isSafeInteger(nextVoice)) throw new Error('Unable to allocate a distinct TAB voice.');
+    tabVoices.set(sourceVoice, String(nextVoice));
+    occupiedVoiceNumbers.add(nextVoice);
+    nextVoice += 1;
+  }
+  return tabVoices;
+}
+
+function writeStaff(events, assignments, staff, extent, voiceMap = null) {
   const byVoice = new Map();
   for (const event of events) {
     const list = byVoice.get(event.voice) ?? [];
@@ -70,7 +91,7 @@ function writeStaff(events, assignments, staff, extent) {
         if (event.onsetDivisions > cursor) xml += tag('forward', tag('duration', event.onsetDivisions - cursor));
       }
       const assignment = assignments.get(event.sourceEventId);
-      xml += noteXml(event, assignment, staff, isChord);
+      xml += noteXml(event, assignment, staff, isChord, voiceMap?.get(voice) ?? voice);
       if (!isChord) cursor = event.onsetDivisions + event.durationDivisions;
       previousOnset = event.onsetDivisions;
     }
@@ -116,6 +137,7 @@ export function serializeGuitarTabMusicXml({ sourceSession, document }) {
   if (document.sessionId !== sourceSession.sessionId) throw new Error('Stale assignment document does not match source session.');
   if (!document.canExport()) throw new Error('TAB assignment document is incomplete.');
   const assignments = new Map(document.listAssignments().map(({ sourceEventId, string, fret }) => [sourceEventId, { string, fret }]));
+  const tabVoiceMap = createTabVoiceMap(sourceSession.events);
 
   let measuresXml = '';
   for (const measure of sourceSession.measures) {
@@ -124,7 +146,7 @@ export function serializeGuitarTabMusicXml({ sourceSession, document }) {
     let body = attributesXml(measure, measure.measureIndex === 0);
     body += writeStaff(events, assignments, 1, extent);
     if (extent > 0) body += tag('backup', tag('duration', extent));
-    body += writeStaff(events, assignments, 2, extent);
+    body += writeStaff(events, assignments, 2, extent, tabVoiceMap);
     measuresXml += tag('measure', body, ` number="${escapeXml(measure.number)}"`);
   }
 
