@@ -18,9 +18,17 @@ test('pinned Student App compatibility MusicXML has two-staff six-line technical
   const xml = await readFile(new URL('./fixtures/student-app-compat.musicxml', import.meta.url), 'utf8');
   assert.deepEqual(inspectMusicXml(xml), { ok:true, rootName:'score-partwise' });
   assert.match(xml, /<staves>2<\/staves>/);
-  assert.match(xml, /<sign>TAB<\/sign>/);
+  assert.match(xml, /<clef number="1"><sign>G<\/sign><line>2<\/line><\/clef>/);
+  assert.match(xml, /<clef number="2"><sign>TAB<\/sign><line>5<\/line><\/clef>/);
   assert.match(xml, /<staff-lines>6<\/staff-lines>/);
   assert.match(xml, /<technical><string>[1-6]<\/string><fret>\d+<\/fret><\/technical>/);
+  const notes = [...xml.matchAll(/<note>[\s\S]*?<voice>([^<]+)<\/voice>[\s\S]*?<staff>([12])<\/staff>[\s\S]*?<\/note>/gu)]
+    .map((match) => ({ voice: match[1], staff: match[2] }));
+  const notationVoices = new Set(notes.filter((note) => note.staff === '1').map((note) => note.voice));
+  const tabVoices = new Set(notes.filter((note) => note.staff === '2').map((note) => note.voice));
+  assert.deepEqual([...notationVoices], ['1']);
+  assert.deepEqual([...tabVoices], ['5']);
+  assert.deepEqual([...tabVoices].filter((voice) => notationVoices.has(voice)), []);
 });
 
 test('production source and package do not depend on Guitar TAB Engine or alphaTab', async () => {
