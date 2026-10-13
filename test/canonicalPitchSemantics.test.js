@@ -19,15 +19,16 @@ function documentFor(session) {
   return createTabAssignmentDocument(session);
 }
 
-test('clef octave context does not transpose canonical physical pitch', () => {
+test('clef octave context does not transpose canonical source-sounding pitch', () => {
   const source = score({
     attributes: '<divisions>4</divisions><clef number="1"><sign>G</sign><line>2</line><clef-octave-change>-1</clef-octave-change></clef>',
   });
-  const session = createSourceSession(source);
+  const session = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
   const event = session.events[0];
 
   assert.equal(event.pitch.midi, 61);
   assert.equal(event.soundingPitchMidi, 61);
+  assert.equal(event.guitarPhysicalPitchMidi, 61);
   assert.equal(session.sourceXml, source);
 
   const accepted = documentFor(session);
@@ -49,15 +50,16 @@ test('clef octave context does not transpose canonical physical pitch', () => {
   assert.match(output, /<technical><string>2<\/string><fret>2<\/fret><\/technical>/);
 });
 
-test('explicit MusicXML octave transpose is applied exactly once and preserved once', () => {
+test('explicit MusicXML octave transpose is applied exactly once under source-sounding policy', () => {
   const source = score({
     attributes: '<divisions>4</divisions><transpose><diatonic>0</diatonic><chromatic>0</chromatic><octave-change>-1</octave-change></transpose>',
   });
-  const session = createSourceSession(source);
+  const session = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
   const event = session.events[0];
 
   assert.equal(event.pitch.midi, 61);
   assert.equal(event.soundingPitchMidi, 49);
+  assert.equal(event.guitarPhysicalPitchMidi, 49);
 
   const accepted = documentFor(session);
   assert.deepEqual(
@@ -78,13 +80,14 @@ test('explicit MusicXML octave transpose is applied exactly once and preserved o
   assert.equal(session.sourceXml, source);
 });
 
-test('plain non-transposing source keeps pitch and source bytes unchanged', () => {
+test('plain non-transposing source keeps source-sounding pitch and source bytes unchanged', () => {
   const source = score();
-  const session = createSourceSession(source);
+  const session = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
   const event = session.events[0];
 
   assert.equal(event.pitch.midi, 61);
   assert.equal(event.soundingPitchMidi, 61);
+  assert.equal(event.guitarPhysicalPitchMidi, 61);
   assert.equal(session.sourceXml, source);
 
   const document = documentFor(session);
@@ -111,4 +114,82 @@ test('mid-measure clef context fails closed instead of moving to measure start',
   );
 
   assert.throws(() => createSourceSession(source), /mid-measure clef/i);
+});
+
+test('standard guitar written policy resolves plain A4 to physical A3 and isolates session identity', () => {
+  const source = score({ step: 'A', alter: 0, octave: 4 });
+  const sourceSounding = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
+  const standardGuitar = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+
+  assert.equal(sourceSounding.events[0].pitch.midi, 69);
+  assert.equal(sourceSounding.events[0].soundingPitchMidi, 69);
+  assert.equal(sourceSounding.events[0].guitarPhysicalPitchMidi, 69);
+  assert.equal(standardGuitar.events[0].pitch.midi, 69);
+  assert.equal(standardGuitar.events[0].soundingPitchMidi, 69);
+  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 57);
+  assert.notEqual(sourceSounding.sessionId, standardGuitar.sessionId);
+  assert.equal(sourceSounding.sourceXml, source);
+  assert.equal(standardGuitar.sourceXml, source);
+
+  const accepted = documentFor(standardGuitar);
+  assert.deepEqual(
+    accepted.assignPosition(standardGuitar.events[0].sourceEventId, { string: 3, fret: 2 }),
+    { string: 3, fret: 2 },
+  );
+
+  const rejected = documentFor(standardGuitar);
+  assert.throws(
+    () => rejected.assignPosition(standardGuitar.events[0].sourceEventId, { string: 1, fret: 5 }),
+    /pitch/i,
+  );
+
+  const sourceSoundingDocument = documentFor(sourceSounding);
+  assert.deepEqual(
+    sourceSoundingDocument.assignPosition(sourceSounding.events[0].sourceEventId, { string: 1, fret: 5 }),
+    { string: 1, fret: 5 },
+  );
+});
+
+test('clef octave context never silently chooses the guitar target policy', () => {
+  const source = score({
+    step: 'C',
+    alter: 1,
+    octave: 4,
+    attributes: '<divisions>4</divisions><clef number="1"><sign>G</sign><line>2</line><clef-octave-change>-1</clef-octave-change></clef>',
+  });
+  const sourceSounding = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
+  const standardGuitar = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+
+  assert.equal(sourceSounding.events[0].pitch.midi, 61);
+  assert.equal(sourceSounding.events[0].soundingPitchMidi, 61);
+  assert.equal(sourceSounding.events[0].guitarPhysicalPitchMidi, 61);
+  assert.equal(standardGuitar.events[0].pitch.midi, 61);
+  assert.equal(standardGuitar.events[0].soundingPitchMidi, 61);
+  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 49);
+});
+
+test('standard guitar written policy derives target from written pitch, not explicit source transpose', () => {
+  const source = score({
+    step: 'A',
+    alter: 0,
+    octave: 4,
+    attributes: '<divisions>4</divisions><transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose>',
+  });
+  const sourceSounding = createSourceSession(source, { guitarPitchPolicy: 'source-sounding' });
+  const standardGuitar = createSourceSession(source, { guitarPitchPolicy: 'standard-guitar-written' });
+
+  assert.equal(sourceSounding.events[0].pitch.midi, 69);
+  assert.equal(sourceSounding.events[0].soundingPitchMidi, 67);
+  assert.equal(sourceSounding.events[0].guitarPhysicalPitchMidi, 67);
+  assert.equal(standardGuitar.events[0].pitch.midi, 69);
+  assert.equal(standardGuitar.events[0].soundingPitchMidi, 67);
+  assert.equal(standardGuitar.events[0].guitarPhysicalPitchMidi, 57);
+  assert.equal(standardGuitar.sourceXml, source);
+});
+
+test('unknown guitar pitch policy fails closed', () => {
+  assert.throws(
+    () => createSourceSession(score(), { guitarPitchPolicy: 'guess-from-filename' }),
+    /guitar.*pitch.*policy|unsupported|unknown/i,
+  );
 });

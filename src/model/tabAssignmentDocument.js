@@ -11,7 +11,30 @@ export function createTabAssignmentDocument(sourceSession, options = {}) {
   const capo = options.capo ?? 0;
   const eventById = new Map(sourceSession.events.map((event) => [event.sourceEventId, event]));
   const groupById = new Map(sourceSession.groups.map((group) => [group.groupId, group]));
-  let assignments = new Map();
+
+  function seedSourceTechnicalAssignments() {
+    const seeded = new Map();
+    for (const event of sourceSession.events) {
+      const position = event?.sourceTechnicalPosition;
+      if (!position) continue;
+      const result = validatePositionForEvent(event, position, tuning, capo);
+      if (!result.ok) {
+        throw new Error(`Invalid source guitar technical position: ${result.code.replaceAll('_', ' ').toLowerCase()}.`);
+      }
+      const group = groupById.get(event.groupId);
+      for (const peerId of group?.sourceEventIds ?? []) {
+        if (peerId === event.sourceEventId) continue;
+        const peer = seeded.get(peerId);
+        if (peer?.string === position.string) {
+          throw new Error('Duplicate source guitar technical string assignment inside simultaneous group.');
+        }
+      }
+      seeded.set(event.sourceEventId, { string: position.string, fret: position.fret });
+    }
+    return seeded;
+  }
+
+  let assignments = seedSourceTechnicalAssignments();
   const history = createHistory();
 
   function getAssignment(sourceEventId) {

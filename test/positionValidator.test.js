@@ -22,3 +22,21 @@ test('rejects invalid string/fret and wrong pitch', async () => {
   assert.equal(validatePositionForEvent(event(64), { string: 1, fret: 21 }).code, 'INVALID_FRET');
   assert.equal(validatePositionForEvent(event(64), { string: 2, fret: 0 }).code, 'PITCH_MISMATCH');
 });
+
+test('prefers resolved guitar physical pitch over source sounding pitch', async () => {
+  const { validatePositionForEvent } = await api();
+  const guitarTargetEvent = {
+    pitch: { midi: 69 },
+    soundingPitchMidi: 69,
+    guitarPhysicalPitchMidi: 57,
+  };
+
+  assert.deepEqual(
+    validatePositionForEvent(guitarTargetEvent, { string: 3, fret: 2 }),
+    { ok: true, midi: 57 },
+  );
+  assert.deepEqual(
+    validatePositionForEvent(guitarTargetEvent, { string: 1, fret: 5 }),
+    { ok: false, code: 'PITCH_MISMATCH', expectedMidi: 57, actualMidi: 69 },
+  );
+});
