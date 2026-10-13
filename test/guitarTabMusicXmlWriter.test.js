@@ -168,3 +168,21 @@ test('uses disjoint notation and TAB voice namespaces for OSMD multi-staff rende
     'notation and TAB staff voices must not collide inside one MusicXML part',
   );
 });
+
+
+test('allocates the first free TAB voice without overflowing a maximum source voice', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const sourceVoice = String(Number.MAX_SAFE_INTEGER);
+  const session = createSourceSession(score(note('E', 4, 4, sourceVoice)));
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [{ string: 1, fret: 0 }]),
+  });
+  const notes = [...xml.matchAll(/<note>[\s\S]*?<voice>([^<]+)<\/voice>[\s\S]*?<staff>([12])<\/staff>[\s\S]*?<\/note>/gu)]
+    .map((match) => ({ voice: match[1], staff: match[2] }));
+
+  assert.deepEqual(notes, [
+    { voice: sourceVoice, staff: '1' },
+    { voice: '5', staff: '2' },
+  ]);
+});
