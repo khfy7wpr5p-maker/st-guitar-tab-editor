@@ -34,6 +34,7 @@ function notationsXml(event, assignment, withTechnical) {
   let body = '';
   if (event.tieStop) body += empty('tied', ' type="stop"');
   if (event.tieStart) body += empty('tied', ' type="start"');
+  body += (event.tuplets ?? []).map((tuplet) => contextXml(tuplet)).join('');
   if (withTechnical) body += tag('technical', tag('string', assignment.string) + tag('fret', assignment.fret));
   return body ? tag('notations', body) : '';
 }
@@ -46,6 +47,7 @@ function noteXml(event, assignment, staff, chord, voice = event.voice) {
   body += tag('voice', escapeXml(voice));
   if (event.type) body += tag('type', escapeXml(event.type));
   for (let i = 0; i < (event.dots ?? 0); i += 1) body += empty('dot');
+  if (event.timeModification) body += contextXml(event.timeModification);
   body += tag('staff', staff);
   if (staff === 1) body += beamXml(event);
   body += notationsXml(event, assignment, staff === 2);
