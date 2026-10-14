@@ -90,6 +90,23 @@ test('preserves multi-voice onset with backup/forward and reparses', async () =>
   assert.match(xml, /<forward><duration>4<\/duration><\/forward>/);
 });
 
+test('does not rewind before measure start in rest-only measures', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const first = score(note('E', 4, 16));
+  const source = first.replace(
+    '</part>',
+    '<measure number="2"><note><rest measure="yes"/><duration>16</duration><voice>1</voice><type>whole</type></note></measure></part>',
+  );
+  const session = createSourceSession(source);
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [{ string: 1, fret: 0 }]),
+  });
+  const restOnlyMeasure = xml.match(/<measure number="2">[\s\S]*?<\/measure>/u)?.[0] ?? '';
+
+  assert.doesNotMatch(restOnlyMeasure, /<backup>/);
+});
+
 test('supports a complete six-note vertical group', async () => {
   const { serializeGuitarTabMusicXml } = await writerApi();
   const pitches = [
