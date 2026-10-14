@@ -77,6 +77,31 @@ test('preserves source beams on notation staff without synthesizing TAB beams', 
   assert.equal(tabNotes.some((value) => value.includes('<beam')), false);
 });
 
+test('preserves tuplet timing and notation on notation and TAB staffs', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const timing = '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>eighth</normal-type></time-modification>';
+  const source = score(
+    '<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type>'
+      + `${timing}<notations><tuplet type="start" number="1" bracket="yes"/></notations></note>`
+      + `<note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type>${timing}</note>`
+      + `<note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type>${timing}`
+      + '<notations><tuplet type="stop" number="1"/></notations></note>',
+  );
+  const session = createSourceSession(source);
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [
+      { string: 1, fret: 0 },
+      { string: 1, fret: 1 },
+      { string: 1, fret: 2 },
+    ]),
+  });
+
+  assert.equal((xml.match(/<time-modification>/gu) ?? []).length, 6);
+  assert.equal((xml.match(/<tuplet type="start" number="1" bracket="yes"><\/tuplet>/gu) ?? []).length, 2);
+  assert.equal((xml.match(/<tuplet type="stop" number="1"><\/tuplet>/gu) ?? []).length, 2);
+});
+
 test('preserves multi-voice onset with backup/forward and reparses', async () => {
   const { serializeGuitarTabMusicXml } = await writerApi();
   const source = score(

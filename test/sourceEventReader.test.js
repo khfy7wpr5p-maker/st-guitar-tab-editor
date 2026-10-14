@@ -80,10 +80,39 @@ test('supports 2 through 6 simultaneous notes and rejects more than 6', async ()
   assert.throws(() => createSourceSession(score(seven)), /more than 6/i);
 });
 
-test('rejects tuplets/time-modification', async () => {
+test('retains valid tuplet time-modification and notation evidence', async () => {
   const { createSourceSession } = await api();
-  const xml = score('<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>');
-  assert.throws(() => createSourceSession(xml), /time-modification/i);
+  const xml = score('<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>eighth</normal-type></time-modification><notations><tuplet type="start" number="1" bracket="yes"/></notations></note>');
+  const event = createSourceSession(xml).events[0];
+
+  assert.equal(event.timeModification.name, 'time-modification');
+  assert.equal(event.timeModification.children[0].text, '3');
+  assert.equal(event.timeModification.children[1].text, '2');
+  assert.equal(event.tuplets[0].attributes.type, 'start');
+  assert.equal(event.tuplets[0].attributes.number, '1');
+});
+
+test('rejects malformed tuplet time-modification ratios', async () => {
+  const { createSourceSession } = await api();
+  const missingNormal = score('<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes></time-modification></note>');
+  const zeroActual = score('<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>0</actual-notes><normal-notes>2</normal-notes></time-modification></note>');
+
+  assert.throws(() => createSourceSession(missingNormal), /normal-notes/i);
+  assert.throws(() => createSourceSession(zeroActual), /positive/i);
+});
+
+test('rejects non-schema time-modification structure and tuplet types', async () => {
+  const { createSourceSession } = await api();
+  const wrap = (detail) => score(`<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type>${detail}</note>`);
+  const reversed = wrap('<time-modification><normal-notes>2</normal-notes><actual-notes>3</actual-notes></time-modification>');
+  const decimal = wrap('<time-modification><actual-notes>3.0</actual-notes><normal-notes>2</normal-notes></time-modification>');
+  const unknown = wrap('<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><bogus/></time-modification>');
+  const continued = wrap('<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="continue"/></notations>');
+
+  assert.throws(() => createSourceSession(reversed), /followed by/i);
+  assert.throws(() => createSourceSession(decimal), /positive integers/i);
+  assert.throws(() => createSourceSession(unknown), /unsupported or misplaced/i);
+  assert.throws(() => createSourceSession(continued), /start or stop/i);
 });
 
 test('retains tie flags and ignores rests as editable events while moving time', async () => {

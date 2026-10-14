@@ -3,6 +3,11 @@ import { inspectMusicXml } from './intake.js';
 
 const STEP_TO_SEMITONE = Object.freeze({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 });
 const BEAM_VALUES = new Set(['begin', 'continue', 'end', 'forward hook', 'backward hook']);
+const TUPLET_TYPES = new Set(['start', 'stop']);
+const NOTE_TYPES = new Set([
+  '1024th', '512th', '256th', '128th', '64th', '32nd', '16th',
+  'eighth', 'quarter', 'half', 'whole', 'breve', 'long', 'maxima',
+]);
 
 function intText(node, name, { required = true, fallback = null } = {}) {
   const raw = childText(node, name);
@@ -110,6 +115,53 @@ function beamsFromNote(note) {
     if (!BEAM_VALUES.has(value)) throw new Error(`Unsupported beam value: ${value}`);
     return Object.freeze({ number, value });
   }));
+}
+
+function timeModificationFromNote(note) {
+  const nodes = children(note, 'time-modification');
+  if (nodes.length === 0) return null;
+  if (nodes.length > 1) throw new Error('Ambiguous time-modification evidence.');
+  const node = nodes[0];
+  if (Object.keys(node.attributes).length > 0 || node.text.trim()) {
+    throw new Error('Unsupported time-modification attributes or text.');
+  }
+  const names = node.children.map((child) => child.name);
+  if (names[0] !== 'actual-notes' || names[1] !== 'normal-notes') {
+    throw new Error('time-modification requires actual-notes followed by normal-notes.');
+  }
+  let index = 2;
+  if (names[index] === 'normal-type') index += 1;
+  while (names[index] === 'normal-dot') index += 1;
+  if (index !== names.length) throw new Error('Unsupported or misplaced time-modification child.');
+
+  const [actualNode, normalNode] = node.children;
+  for (const ratioNode of [actualNode, normalNode]) {
+    if (Object.keys(ratioNode.attributes).length > 0 || ratioNode.children.length > 0
+      || !/^[1-9][0-9]*$/u.test(ratioNode.text.trim())) {
+      throw new Error('time-modification ratios must be positive integers.');
+    }
+    const value = Number(ratioNode.text.trim());
+    if (!Number.isSafeInteger(value)) throw new Error('time-modification ratios must be safe positive integers.');
+  }
+  const normalType = node.children.find((child) => child.name === 'normal-type');
+  if (normalType && (Object.keys(normalType.attributes).length > 0 || normalType.children.length > 0
+    || !NOTE_TYPES.has(normalType.text.trim()))) {
+    throw new Error('Invalid time-modification normal-type.');
+  }
+  for (const normalDot of node.children.filter((child) => child.name === 'normal-dot')) {
+    if (Object.keys(normalDot.attributes).length > 0 || normalDot.children.length > 0 || normalDot.text.trim()) {
+      throw new Error('Invalid time-modification normal-dot.');
+    }
+  }
+  return node;
+}
+
+function tupletsFromNote(note) {
+  const tuplets = children(note, 'notations').flatMap((notations) => children(notations, 'tuplet'));
+  for (const tuplet of tuplets) {
+    if (!TUPLET_TYPES.has(tuplet.attributes.type)) throw new Error('Tuplet notation type must be start or stop.');
+  }
+  return Object.freeze(tuplets);
 }
 
 function normalizeTargetSelection(value) {
@@ -254,7 +306,8 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       );
       const requiresUnsupportedValidation = normalizedTarget === null || !explicitlyOutsideTarget;
       const isGrace = Boolean(firstChild(child, 'grace'));
-      if (requiresUnsupportedValidation && firstChild(child, 'time-modification')) throw new Error('time-modification is unsupported in MVP.');
+      const timeModification = requiresUnsupportedValidation ? timeModificationFromNote(child) : null;
+      const tuplets = requiresUnsupportedValidation ? tupletsFromNote(child) : Object.freeze([]);
       if (requiresUnsupportedValidation && isGrace) throw new Error('grace notes are unsupported in MVP.');
       if (requiresUnsupportedValidation && firstChild(child, 'unpitched')) throw new Error('unpitched/percussion notes are unsupported in MVP.');
 
@@ -304,6 +357,8 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
             type: childText(child, 'type'),
             dots,
             beams: beamsFromNote(child),
+            timeModification,
+            tuplets,
             ...tieFlags(child),
             sourceOrder: noteOrder,
             groupId: null,
