@@ -176,3 +176,36 @@ test('keeps every simultaneous chord tone inside the selected target voice', asy
   assert.equal(session.groups.length, 1);
   assert.equal(session.groups[0].sourceEventIds.length, 2);
 });
+
+test('unsupported notes outside the selected voice do not reject its source session', async () => {
+  const { createSourceSession } = await api();
+  const xml = `<?xml version="1.0"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note>
+    <backup><duration>4</duration></backup>
+    <note><grace/><pitch><step>D</step><octave>4</octave></pitch><voice>2</voice><staff>1</staff><type>eighth</type></note>
+    <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>2</voice><staff>1</staff><type>quarter</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>
+  </measure></part></score-partwise>`;
+
+  const session = createSourceSession(xml, {
+    targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 1 },
+  });
+
+  assert.equal(session.events.length, 1);
+  assert.equal(session.events[0].pitch.step, 'C');
+  assert.equal(session.events[0].voice, '1');
+});
+
+test('unsupported notes with ambiguous selected-target identity still fail closed', async () => {
+  const { createSourceSession } = await api();
+  const xml = `<?xml version="1.0"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><type>quarter</type></note>
+    <note><unpitched><display-step>D</display-step><display-octave>4</display-octave></unpitched><duration>4</duration><voice>1</voice><type>quarter</type></note>
+  </measure></part></score-partwise>`;
+
+  assert.throws(
+    () => createSourceSession(xml, {
+      targetSelection: { partId: 'P1', partIndex: 0, staff: 1, voice: 1 },
+    }),
+    /unpitched|percussion/i,
+  );
+});

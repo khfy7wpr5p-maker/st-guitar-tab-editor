@@ -24,6 +24,12 @@ function tieXml(event) {
   return `${event.tieStop ? empty('tie', ' type="stop"') : ''}${event.tieStart ? empty('tie', ' type="start"') : ''}`;
 }
 
+function beamXml(event) {
+  return (event.beams ?? [])
+    .map((beam) => tag('beam', escapeXml(beam.value), ` number="${beam.number}"`))
+    .join('');
+}
+
 function notationsXml(event, assignment, withTechnical) {
   let body = '';
   if (event.tieStop) body += empty('tied', ' type="stop"');
@@ -41,6 +47,7 @@ function noteXml(event, assignment, staff, chord, voice = event.voice) {
   if (event.type) body += tag('type', escapeXml(event.type));
   for (let i = 0; i < (event.dots ?? 0); i += 1) body += empty('dot');
   body += tag('staff', staff);
+  if (staff === 1) body += beamXml(event);
   body += notationsXml(event, assignment, staff === 2);
   return tag('note', body);
 }
