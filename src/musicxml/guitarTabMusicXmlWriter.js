@@ -149,7 +149,7 @@ export function serializeGuitarTabMusicXml({ sourceSession, document }) {
     const extent = measure.durationDivisions || Math.max(0, ...events.map((event) => event.onsetDivisions + event.durationDivisions));
     let body = attributesXml(measure, measure.measureIndex === 0);
     body += writeStaff(events, assignments, 1, extent);
-    if (extent > 0) body += tag('backup', tag('duration', extent));
+    if (events.length > 0 && extent > 0) body += tag('backup', tag('duration', extent));
     body += writeStaff(events, assignments, 2, extent, tabVoiceMap);
     measuresXml += tag('measure', body, ` number="${escapeXml(measure.number)}"`);
   }
