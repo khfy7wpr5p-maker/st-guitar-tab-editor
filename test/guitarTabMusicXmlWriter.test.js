@@ -48,6 +48,35 @@ test('preserves accidental spelling, duration, voice and tie flags', async () =>
   assert.match(xml, /<tied type="start"\/>/);
 });
 
+test('preserves source beams on notation staff without synthesizing TAB beams', async () => {
+  const { serializeGuitarTabMusicXml } = await writerApi();
+  const source = score(
+    '<note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff><beam number="1">begin</beam><beam number="2">forward hook</beam></note>'
+      + '<note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff><beam number="1">end</beam><beam number="2">backward hook</beam></note>',
+  );
+  const session = createSourceSession(source);
+
+  assert.deepEqual(session.events.map((event) => event.beams), [
+    [{ number: 1, value: 'begin' }, { number: 2, value: 'forward hook' }],
+    [{ number: 1, value: 'end' }, { number: 2, value: 'backward hook' }],
+  ]);
+
+  const xml = serializeGuitarTabMusicXml({
+    sourceSession: session,
+    document: assignAll(session, [
+      { string: 1, fret: 0 },
+      { string: 1, fret: 1 },
+    ]),
+  });
+  const outputNotes = [...xml.matchAll(/<note>[\s\S]*?<\/note>/gu)].map((match) => match[0]);
+  const notationNotes = outputNotes.filter((value) => value.includes('<staff>1</staff>'));
+  const tabNotes = outputNotes.filter((value) => value.includes('<staff>2</staff>'));
+
+  assert.match(notationNotes[0], /<beam number="1">begin<\/beam><beam number="2">forward hook<\/beam>/);
+  assert.match(notationNotes[1], /<beam number="1">end<\/beam><beam number="2">backward hook<\/beam>/);
+  assert.equal(tabNotes.some((value) => value.includes('<beam')), false);
+});
+
 test('preserves multi-voice onset with backup/forward and reparses', async () => {
   const { serializeGuitarTabMusicXml } = await writerApi();
   const source = score(

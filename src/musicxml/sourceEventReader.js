@@ -2,6 +2,7 @@ import { childText, children, firstChild, parseXml } from './xml.js';
 import { inspectMusicXml } from './intake.js';
 
 const STEP_TO_SEMITONE = Object.freeze({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 });
+const BEAM_VALUES = new Set(['begin', 'continue', 'end', 'forward hook', 'backward hook']);
 
 function intText(node, name, { required = true, fallback = null } = {}) {
   const raw = childText(node, name);
@@ -97,6 +98,18 @@ function tieFlags(note) {
     if (tie.attributes.type === 'stop') tieStop = true;
   }
   return { tieStart, tieStop };
+}
+
+function beamsFromNote(note) {
+  return Object.freeze(children(note, 'beam').map((beam) => {
+    const number = beam.attributes.number === undefined ? 1 : Number(beam.attributes.number);
+    const value = beam.text.trim();
+    if (!Number.isSafeInteger(number) || number < 1 || number > 8) {
+      throw new Error('Beam number must be an integer from 1 through 8.');
+    }
+    if (!BEAM_VALUES.has(value)) throw new Error(`Unsupported beam value: ${value}`);
+    return Object.freeze({ number, value });
+  }));
 }
 
 function normalizeTargetSelection(value) {
@@ -225,12 +238,31 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       }
       if (child.name !== 'note') continue;
       timeContentSeen = true;
-      if (firstChild(child, 'time-modification')) throw new Error('time-modification is unsupported in MVP.');
-      if (firstChild(child, 'grace')) throw new Error('grace notes are unsupported in MVP.');
-      if (firstChild(child, 'unpitched')) throw new Error('unpitched/percussion notes are unsupported in MVP.');
-
       const rawVoice = childText(child, 'voice');
       const rawStaff = childText(child, 'staff');
+      const identity = explicitTargetIdentity(child);
+      const selected = normalizedTarget === null || (
+        identity !== null &&
+        identity.staff === normalizedTarget.staff &&
+        identity.voice === normalizedTarget.voice
+      );
+      const explicitVoice = rawVoice === null ? null : Number(rawVoice);
+      const explicitStaff = rawStaff === null ? null : Number(rawStaff);
+      const explicitlyOutsideTarget = normalizedTarget !== null && (
+        (Number.isSafeInteger(explicitVoice) && explicitVoice >= 0 && explicitVoice !== normalizedTarget.voice) ||
+        (Number.isSafeInteger(explicitStaff) && explicitStaff >= 1 && explicitStaff !== normalizedTarget.staff)
+      );
+      const requiresUnsupportedValidation = normalizedTarget === null || !explicitlyOutsideTarget;
+      const isGrace = Boolean(firstChild(child, 'grace'));
+      if (requiresUnsupportedValidation && firstChild(child, 'time-modification')) throw new Error('time-modification is unsupported in MVP.');
+      if (requiresUnsupportedValidation && isGrace) throw new Error('grace notes are unsupported in MVP.');
+      if (requiresUnsupportedValidation && firstChild(child, 'unpitched')) throw new Error('unpitched/percussion notes are unsupported in MVP.');
+
+      if (!selected && isGrace) {
+        noteOrder += 1;
+        continue;
+      }
+
       const voice = rawVoice ?? '1';
       const staff = rawStaff ?? '1';
       const duration = intText(child, 'duration');
@@ -246,17 +278,11 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       }
       maxCursor = Math.max(maxCursor, onset + duration);
 
-      const pitch = pitchFromNote(child);
-      const isRest = Boolean(firstChild(child, 'rest'));
-      if (!pitch && !isRest) throw new Error('Unsupported note without pitch/rest.');
-      if (pitch) {
-        const identity = explicitTargetIdentity(child);
-        const selected = normalizedTarget === null || (
-          identity !== null &&
-          identity.staff === normalizedTarget.staff &&
-          identity.voice === normalizedTarget.voice
-        );
-        if (selected) {
+      if (selected) {
+        const pitch = pitchFromNote(child);
+        const isRest = Boolean(firstChild(child, 'rest'));
+        if (!pitch && !isRest) throw new Error('Unsupported note without pitch/rest.');
+        if (pitch) {
           const sourceEventId = `${partId}:m${measureIndex}:v${voice}:o${onset}:n${noteOrder}`;
           const dots = children(child, 'dot').length;
           const event = {
@@ -277,6 +303,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
             sourceTechnicalPosition: sourceTechnicalPositionFromNote(child),
             type: childText(child, 'type'),
             dots,
+            beams: beamsFromNote(child),
             ...tieFlags(child),
             sourceOrder: noteOrder,
             groupId: null,
