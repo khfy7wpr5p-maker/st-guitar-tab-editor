@@ -25,6 +25,7 @@ function targetFingerprint(targetSelection) {
     targetSelection.partIndex,
     targetSelection.staff,
     targetSelection.voice,
+    targetSelection.scope ?? 'voice',
   ].join('\u0000'));
 }
 
