@@ -180,12 +180,18 @@ function normalizeTargetSelection(value) {
   if (!Number.isSafeInteger(value.voice) || value.voice < 0) {
     throw new Error('targetSelection voice must be a safe integer >= 0.');
   }
-  return Object.freeze({
+  const scope = value.scope ?? 'voice';
+  if (scope !== 'voice' && scope !== 'staff') {
+    throw new Error('targetSelection scope must be voice or staff.');
+  }
+  const normalized = {
     partId,
     partIndex: value.partIndex,
     staff: value.staff,
     voice: value.voice,
-  });
+  };
+  if (scope === 'staff') normalized.scope = scope;
+  return Object.freeze(normalized);
 }
 
 function resolveSourcePart(root, targetSelection) {
@@ -293,15 +299,19 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       const rawVoice = childText(child, 'voice');
       const rawStaff = childText(child, 'staff');
       const identity = explicitTargetIdentity(child);
+      const effectiveVoice = identity?.voice ?? (rawVoice === null ? 1 : Number(rawVoice));
+      const effectiveStaff = identity?.staff ?? (rawStaff === null ? 1 : Number(rawStaff));
       const selected = normalizedTarget === null || (
-        identity !== null &&
-        identity.staff === normalizedTarget.staff &&
-        identity.voice === normalizedTarget.voice
+        Number.isSafeInteger(effectiveStaff) && effectiveStaff === normalizedTarget.staff &&
+        (normalizedTarget.scope === 'staff' || (
+          Number.isSafeInteger(effectiveVoice) && effectiveVoice === normalizedTarget.voice
+        ))
       );
       const explicitVoice = rawVoice === null ? null : Number(rawVoice);
       const explicitStaff = rawStaff === null ? null : Number(rawStaff);
       const explicitlyOutsideTarget = normalizedTarget !== null && (
-        (Number.isSafeInteger(explicitVoice) && explicitVoice >= 0 && explicitVoice !== normalizedTarget.voice) ||
+        (normalizedTarget.scope !== 'staff' && Number.isSafeInteger(explicitVoice)
+          && explicitVoice >= 0 && explicitVoice !== normalizedTarget.voice) ||
         (Number.isSafeInteger(explicitStaff) && explicitStaff >= 1 && explicitStaff !== normalizedTarget.staff)
       );
       const requiresUnsupportedValidation = normalizedTarget === null || !explicitlyOutsideTarget;
@@ -386,6 +396,7 @@ export function readSourceEvents(xmlText, { targetSelection = null } = {}) {
       number: measure.attributes.number ?? String(measureIndex + 1),
       divisions: currentDivisions,
       durationDivisions: maxCursor,
+      finalCursorDivisions: cursor,
       timeSignature: timeNode ? { beats: childText(timeNode, 'beats'), beatType: childText(timeNode, 'beat-type') } : null,
       keySignature: selectedKeys[0] ?? null,
       clef: measureClef,
