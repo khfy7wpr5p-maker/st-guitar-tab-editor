@@ -1,3 +1,5 @@
+import { childText, children, firstChild, parseXml } from './xml.js';
+
 const TUNING_LINES = Object.freeze([
   ['E', 2], ['A', 2], ['D', 3], ['G', 3], ['B', 3], ['E', 4],
 ]);
@@ -39,7 +41,7 @@ function notationsXml(event, assignment, withTechnical) {
   return body ? tag('notations', body) : '';
 }
 
-function noteXml(event, assignment, staff, chord, voice = event.voice) {
+function noteXml(event, assignment, staff, chord, voice = event.voice, withTechnical = false) {
   let body = chord ? empty('chord') : '';
   body += pitchXml(event.pitch);
   body += tag('duration', event.durationDivisions);
@@ -50,7 +52,7 @@ function noteXml(event, assignment, staff, chord, voice = event.voice) {
   if (event.timeModification) body += contextXml(event.timeModification);
   body += tag('staff', staff);
   if (staff === 1) body += beamXml(event);
-  body += notationsXml(event, assignment, staff === 2);
+  body += notationsXml(event, assignment, withTechnical);
   return tag('note', body);
 }
 
@@ -97,7 +99,7 @@ function writeStaff(events, assignments, staff, extent, voiceMap = null) {
         if (event.onsetDivisions > cursor) xml += tag('forward', tag('duration', event.onsetDivisions - cursor));
       }
       const assignment = assignments.get(event.sourceEventId);
-      xml += noteXml(event, assignment, staff, isChord, voiceMap?.get(voice) ?? voice);
+      xml += noteXml(event, assignment, staff, isChord, voiceMap?.get(voice) ?? voice, voiceMap !== null);
       if (!isChord) cursor = event.onsetDivisions + event.durationDivisions;
       previousOnset = event.onsetDivisions;
     }
@@ -114,28 +116,104 @@ function contextXml(node, notationStaff = false, requireStaffNumber = false) {
   return tag(node.name, escapeXml(node.text) + node.children.map((child) => contextXml(child)).join(''), encodedAttrs);
 }
 
-function attributesXml(measure, firstMeasure) {
-  let body = tag('divisions', measure.divisions);
-  if (measure.keySignature) body += contextXml(measure.keySignature, true);
-  if (measure.timeSignature?.beats && measure.timeSignature?.beatType) {
-    body += tag('time', tag('beats', escapeXml(measure.timeSignature.beats)) + tag('beat-type', escapeXml(measure.timeSignature.beatType)));
+function textNode(name, text, attributes = {}) {
+  return { name, attributes: { ...attributes }, children: [], text: String(text) };
+}
+
+function containerNode(name, childrenValue, attributes = {}) {
+  return { name, attributes: { ...attributes }, children: childrenValue, text: '' };
+}
+
+function insertAttributeChild(attributes, node) {
+  const order = ['divisions', 'key', 'time', 'staves', 'part-symbol', 'instruments', 'clef', 'staff-details', 'transpose'];
+  const targetOrder = order.indexOf(node.name);
+  let index = attributes.children.length;
+  for (let current = 0; current < attributes.children.length; current += 1) {
+    const currentOrder = order.indexOf(attributes.children[current].name);
+    if (currentOrder > targetOrder) {
+      index = current;
+      break;
+    }
   }
-  if (firstMeasure) {
-    body += tag('staves', 2);
-    body += measure.clef
-      ? contextXml(measure.clef, true, true)
-      : tag('clef', tag('sign', 'G') + tag('line', 2), ' number="1"');
-    body += tag('clef', tag('sign', 'TAB') + tag('line', 5), ' number="2"');
-    let tuning = tag('staff-type', 'alternate') + tag('staff-lines', 6);
-    TUNING_LINES.forEach(([step, octave], index) => {
-      tuning += tag('staff-tuning', tag('tuning-step', step) + tag('tuning-octave', octave), ` line="${index + 1}"`);
-    });
-    body += tag('staff-details', tuning, ' number="2" show-frets="numbers"');
-  } else if (measure.clef) {
-    body += contextXml(measure.clef, true, true);
+  attributes.children.splice(index, 0, node);
+}
+
+function tabClefNode(tabStaff) {
+  return containerNode('clef', [textNode('sign', 'TAB'), textNode('line', 5)], { number: String(tabStaff) });
+}
+
+function tabStaffDetailsNode(tabStaff) {
+  const body = [textNode('staff-type', 'alternate'), textNode('staff-lines', 6)];
+  TUNING_LINES.forEach(([step, octave], index) => {
+    body.push(containerNode('staff-tuning', [
+      textNode('tuning-step', step),
+      textNode('tuning-octave', octave),
+    ], { line: String(index + 1) }));
+  });
+  return containerNode('staff-details', body, { number: String(tabStaff), 'show-frets': 'numbers' });
+}
+
+function resolveTargetPart(root, sourceSession) {
+  const parts = children(root, 'part');
+  const part = parts[sourceSession.partIndex];
+  if (!part || part.attributes.id !== sourceSession.partId) {
+    throw new Error('Source session target part no longer matches source MusicXML.');
   }
-  if (measure.transpose) body += contextXml(measure.transpose, true);
-  return tag('attributes', body);
+  return part;
+}
+
+function maxSourceStaff(part) {
+  let maximum = 1;
+  for (const measure of children(part, 'measure')) {
+    for (const attributes of children(measure, 'attributes')) {
+      const staves = Number(childText(attributes, 'staves'));
+      if (Number.isSafeInteger(staves) && staves > maximum) maximum = staves;
+    }
+    for (const note of children(measure, 'note')) {
+      const staff = Number(childText(note, 'staff'));
+      if (Number.isSafeInteger(staff) && staff > maximum) maximum = staff;
+    }
+  }
+  return maximum;
+}
+
+function prepareSourceNotation(part, targetStaff, tabStaff) {
+  const measures = children(part, 'measure');
+  if (measures.length === 0) throw new Error('Target part contains no measures.');
+  let firstAttributes = firstChild(measures[0], 'attributes');
+  if (!firstAttributes) {
+    firstAttributes = containerNode('attributes', []);
+    measures[0].children.unshift(firstAttributes);
+  }
+  const staves = firstChild(firstAttributes, 'staves');
+  if (staves) staves.text = String(tabStaff);
+  else insertAttributeChild(firstAttributes, textNode('staves', tabStaff));
+
+  for (const measure of measures) {
+    for (const attributes of children(measure, 'attributes')) {
+      for (const declaredStaves of children(attributes, 'staves')) {
+        declaredStaves.text = String(tabStaff);
+      }
+    }
+  }
+
+  for (const clef of children(firstAttributes, 'clef')) {
+    if (clef.attributes.number === undefined) clef.attributes.number = '1';
+  }
+  for (const details of children(firstAttributes, 'staff-details')) {
+    if (details.attributes.number === undefined) details.attributes.number = '1';
+  }
+  insertAttributeChild(firstAttributes, tabClefNode(tabStaff));
+  insertAttributeChild(firstAttributes, tabStaffDetailsNode(tabStaff));
+
+  for (const measure of measures) {
+    for (const note of children(measure, 'note')) {
+      if (!firstChild(note, 'staff')) {
+        const voiceIndex = note.children.findIndex((child) => child.name === 'voice');
+        note.children.splice(voiceIndex >= 0 ? voiceIndex + 1 : note.children.length, 0, textNode('staff', 1));
+      }
+    }
+  }
 }
 
 export function serializeGuitarTabMusicXml({ sourceSession, document }) {
@@ -144,21 +222,27 @@ export function serializeGuitarTabMusicXml({ sourceSession, document }) {
   if (!document.canExport()) throw new Error('TAB assignment document is incomplete.');
   const assignments = new Map(document.listAssignments().map(({ sourceEventId, string, fret }) => [sourceEventId, { string, fret }]));
   const tabVoiceMap = createTabVoiceMap(sourceSession.events);
+  const root = parseXml(sourceSession.sourceXml);
+  const part = resolveTargetPart(root, sourceSession);
+  const targetStaff = sourceSession.targetSelection?.staff ?? 1;
+  const tabStaff = maxSourceStaff(part) + 1;
+  prepareSourceNotation(part, targetStaff, tabStaff);
+  const measureNodes = children(part, 'measure');
 
-  let measuresXml = '';
   for (const measure of sourceSession.measures) {
     const events = sourceSession.events.filter((event) => event.measureIndex === measure.measureIndex);
     const extent = measure.durationDivisions || Math.max(0, ...events.map((event) => event.onsetDivisions + event.durationDivisions));
-    let body = attributesXml(measure, measure.measureIndex === 0);
-    body += writeStaff(events, assignments, 1, extent);
-    if (events.length > 0 && extent > 0) body += tag('backup', tag('duration', extent));
-    body += writeStaff(events, assignments, 2, extent, tabVoiceMap);
-    measuresXml += tag('measure', body, ` number="${escapeXml(measure.number)}"`);
+    const measureNode = measureNodes[measure.measureIndex];
+    if (!measureNode) throw new Error('Source session measure no longer matches source MusicXML.');
+    const finalCursor = measure.finalCursorDivisions ?? extent;
+    if (events.length > 0 && finalCursor > 0) {
+      measureNode.children.push(containerNode('backup', [textNode('duration', finalCursor)]));
+    }
+    if (events.length > 0) {
+      const tabXml = writeStaff(events, assignments, tabStaff, extent, tabVoiceMap);
+      const fragment = parseXml(`<fragment>${tabXml}</fragment>`);
+      measureNode.children.push(...fragment.children);
+    }
   }
-
-  return `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<score-partwise version="4.0">` +
-    `<part-list><score-part id="P1"><part-name>Guitar TAB</part-name></score-part></part-list>` +
-    `<part id="P1">${measuresXml}</part>` +
-    `</score-partwise>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>${contextXml(root)}`;
 }
