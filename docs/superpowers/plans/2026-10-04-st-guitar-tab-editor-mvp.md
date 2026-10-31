@@ -265,3 +265,18 @@ browser-tests/
 ## Execution Gate
 
 After this plan is explicitly approved, execution may proceed autonomously task-by-task through Task 8 using the selected execution method. Implementation must stop before merge. Cross-repo SesliTab/Student App integration is a separate post-merge plan/gate.
+
+---
+
+## Current implementation reality sync — 2026-10-31
+
+This plan and its original MVP constraints are retained as the historical approved execution plan. The implementation later extended the original one-part/no-tuplet limits. Current Editor `main` tree: `9d6532001c54a06dcc9b0a5db1db1a641d2fe1aa`.
+
+- Explicit target selection supports choosing a part, staff, and voice in multipart `score-partwise` input.
+- Source-aware physical-pitch semantics apply explicit MusicXML `<transpose>` once; clef octave notation does not add another hidden octave shift.
+- Tuplet time-modification ratios and tuplet start/stop notation are preserved (Editor PR #12; SES-231).
+- The Editor exposes a browser runtime build seam through `src/runtime/browserEditorRuntime.js` and `scripts/build-browser-runtime.js`.
+- Existing invariants remain: exact teacher string/fret authority, fixed six-string UI, separate combined Guitar TAB MusicXML output, and fail-closed handling of unsupported or inconsistent input.
+- This Editor runtime is not proof that SesliTab uses this exact revision. Reader runtime pin compatibility remains a separate SES-185 qualification.
+
+See the current architecture summary in [README.md](../../../README.md) and the implementation addendum in [the architecture spec](../specs/2026-10-04-st-guitar-tab-editor-design.md).
