@@ -338,3 +338,31 @@ The MVP architecture is successful when a teacher on PC can:
 Its core invariant is:
 
 **MusicXML owns the music. The teacher owns string/fret. The editor owns six fixed strings and validation.**
+
+
+## Current implementation reality sync — 2026-10-31
+
+This document records the approved baseline architecture. The original MVP boundaries above were later expanded in the implementation; current behavior is defined by the source at `main@9d6532001c54a06dcc9b0a5db1db1a641d2fe1aa` and summarized here.
+
+### Implemented extensions
+
+- Default intake remains narrow. Explicit target selection enables a selected part, staff, and voice within multipart `score-partwise` sources.
+- Physical-pitch validation applies explicit MusicXML `<transpose>` once. `clef-octave-change` is retained as notation context and does not cause a second hidden octave shift.
+- MusicXML tuplet `time-modification` ratios and tuplet start/stop notation are supported and preserved (Editor PR #12, commit `747bd6dafdb092e2bc76a3ce68884e63fec60c18`; Linear SES-231).
+- A browser runtime is built from the Editor core through `scripts/build-browser-runtime.js` and `src/runtime/browserEditorRuntime.js`. The standalone `web/main.js` remains outside the SesliTab runtime import boundary.
+
+### Invariants that remain unchanged
+
+- The Editor is teacher-directed authoring, not automatic TAB solving.
+- MusicXML remains the source of musical events and timing; the teacher owns exact string/fret choices; six fixed strings and validation remain Editor responsibilities.
+- Unsupported or inconsistent input fails closed; source notes are not rewritten to force a playable position.
+- No runtime dependency on the MusicXML-to-Guitar-TAB Engine or alphaTab.
+- SesliTab owns downstream SCORE binding and package validation. An Editor-local source fingerprint is not a delivery authority.
+
+### Integration status boundary
+
+The Editor's browser runtime seam does not establish that SesliTab consumes the latest Editor head. The prior SES-185 pin is historical; exact artifact provenance and compatibility with the current Reader contract must be qualified before changing the Reader pin.
+
+### Documentation write status
+
+The repository README and this specification are being updated on a documentation branch. Notion and Linear reality-sync records were updated separately. No product code, runtime pin, dependency, merge, deployment, or test run is part of this documentation-only sync.
