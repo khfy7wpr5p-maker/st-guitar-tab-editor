@@ -1,30 +1,29 @@
 # st-guitar-tab-editor
 
-PC-first, keyboard-first teacher authoring tool for assigning exact six-string guitar TAB positions to notes that already exist in MusicXML.
+PC-first, keyboard-first teacher authoring tool for assigning exact six-string guitar TAB positions to notes already present in MusicXML.
 
-## MVP flow
+## Current architecture
 
 `MusicXML score -> teacher string/fret assignments -> separate Guitar TAB MusicXML -> SesliTab -> Student App`
 
-The source MusicXML remains the musical authority for pitch and timing. The editor owns only string/fret assignments and always renders six fixed guitar strings independently of any notation renderer.
+The source MusicXML remains authoritative for note identity, written pitch, and timing. The teacher owns exact string/fret assignments; the editor owns validation, assignment/history state, and its fixed six-string UI. The editor does not rewrite source notes to force a TAB position.
 
-## Current MVP boundaries
+## Current implemented boundaries
 
-- `score-partwise` MusicXML with exactly one pitched part.
-- Standard external MusicXML DOCTYPE declarations are accepted without network/DTD resolution; internal subsets/entities fail closed.
-- Single notes and 2–6 simultaneous notes.
-- Standard tuning E2 A2 D3 G3 B3 E4.
-- Frets 0–20.
-- Keyboard navigation/editing with undo/redo.
-- Separate two-staff Guitar TAB MusicXML export with exact `<technical><string>...<fret>...` data.
-- Unsupported or malformed source content fails closed; the editor never changes source pitch/rhythm to fit a TAB position.
+- Strict `score-partwise` MusicXML intake; unsupported structures fail closed.
+- Default intake targets one pitched part. Explicit target selection supports selecting a part, staff, and voice in multipart source files.
+- One to six simultaneous pitched notes are supported per onset group.
+- Source-aware pitch validation applies explicit MusicXML `<transpose>` once; `clef-octave-change` does not add a hidden second octave shift.
+- Tuplet `time-modification` ratios and tuplet start/stop notation are preserved by the editor MusicXML path.
+- Standard tuning E2 A2 D3 G3 B3 E4; supported frets 0–20.
+- Keyboard navigation/editing with undo and redo.
+- Separate two-staff Guitar TAB MusicXML export carries exact `<technical><string>` and `<fret>` values.
+- A browser-consumable runtime is built from the editor core; no network, persistence, or publication authority is added to that core.
 - No runtime dependency on `musicxml-to-guitar-tab-engine` or alphaTab.
 
 ## SesliTab / Student App handoff
 
-The exported file is designed for the existing separate optional Guitar TAB payload. SesliTab should pass the generated XML as `guitarTabMusicXml` / `StudentPracticePackageV1.guitarTab` while keeping the original score MusicXML as the score authority.
-
-Cross-repository wiring is intentionally outside this repository's first merge gate.
+The exported file is the optional Guitar TAB companion to the original score. SesliTab owns downstream SCORE binding and package validation, and must preserve the teacher's string/fret choices. The editor's local source fingerprint is not a delivery trust authority.
 
 ## Development
 
@@ -35,4 +34,8 @@ npm run test:browser
 npm start
 ```
 
-The browser acceptance test uses Chromium and validates the keyboard-first load/edit/undo/redo/export path.
+The browser acceptance test covers the keyboard-first load/edit/undo/redo/export path.
+
+## Architecture sync
+
+Verified against `main@9d6532001c54a06dcc9b0a5db1db1a641d2fe1aa` on 2026-10-31. The initial one-part/no-tuplet MVP limits have since been extended as described above. This does not prove that the current SesliTab Reader consumes or has re-qualified this exact Editor revision.
