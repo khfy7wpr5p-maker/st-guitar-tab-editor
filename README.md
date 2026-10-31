@@ -23,7 +23,7 @@ The source MusicXML remains authoritative for note identity, written pitch, and 
 
 ## SesliTab / Student App handoff
 
-The exported file is the optional Guitar TAB companion to the original score. SesliTab owns downstream SCORE binding and package validation, and must preserve the teacher's string/fret choices. The editor's local source fingerprint is not a delivery trust authority.
+The exported file is the optional Guitar TAB companion to the original score. SesliTab passes the generated XML as `guitarTabMusicXml` / `StudentPracticePackageV1.guitarTab`, while the original score MusicXML remains the musical authority. SesliTab owns downstream SCORE binding and package validation, and must preserve the teacher's string/fret choices. The editor's local source fingerprint is not a delivery trust authority.
 
 ## Development
 
